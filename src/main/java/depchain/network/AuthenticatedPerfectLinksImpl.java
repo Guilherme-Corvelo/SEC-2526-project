@@ -99,7 +99,7 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
 
             long startTime = System.currentTimeMillis();
 
-            while (!sendAcked.get(destId)) {
+            while (!sendAcked.getOrDefault(destId, Boolean.FALSE)) {
                 try {
                     byte[] sig = sign(serializeForSigning(seq, dataPayload));
                     APLMessage msg = new APLMessage(localId, seq, dataPayload, sig);
@@ -181,15 +181,24 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
                         seen.computeIfAbsent(msg.srcId, k -> new ConcurrentHashMap<>());
                         if (seen.get(msg.srcId).putIfAbsent(msg.seq, Boolean.TRUE) == null) {
                             // first time seeing this message
+                            // **IMPORTANT**: send ACK before delivering to application layer
+                            // to avoid deadlocks where the listener thread blocks while
+                            // attempting a send (which itself waits for an ACK).  By
+                            // moving the ack here we ensure the sender is notified
+                            // immediately and cannot be stuck waiting on this side's
+                            // processing of the message.
+                            sendAck(msg.srcId, msg.seq);
+
                             if (listener != null) {
                                 // deliver payload without control byte
                                 byte[] app = new byte[msg.payload.length - 1];
                                 System.arraycopy(msg.payload, 1, app, 0, app.length);
                                 listener.onMessage(msg.srcId, app);
                             }
+                        } else {
+                            // duplicate: still acknowledge so sender can advance
+                            sendAck(msg.srcId, msg.seq);
                         }
-                        // send ACK back to sender regardless of duplication
-                        sendAck(msg.srcId, msg.seq);
                     }
                 } else {
                     // APL3: invalid signature, discard
