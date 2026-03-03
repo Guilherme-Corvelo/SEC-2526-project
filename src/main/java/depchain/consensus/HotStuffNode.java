@@ -14,17 +14,20 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * HotStuffNode: A single replica in the Basic HotStuff consensus protocol.
  * 
- * For Step 3 (no Byzantine faults, automatic leader rotation):
- * - Implements the full protocol flow (propose, vote, finish).
+ * For Step 4 (crash-only faults with failure detection):
+ * - Implements the full protocol flow (propose, vote, commit).
  * - Uses authenticated perfect links for message delivery.
+ * - Integrates timeout-based failure detection to handle leader crashes.
+ * - Automatically triggers view changes when leader is suspected crashed.
  * - Maintains a log of committed blocks.
- * - Notifies a listener when blocks are committed.
+ * - Notifies listeners when blocks are committed or view changes occur.
  */
 public class HotStuffNode implements APLListener {
     private final int nodeId;
     private final List<Integer> nodeIds;
     private final AuthenticatedPerfectLinks apl;
     private final ConsensusListener listener;
+    private ViewChangeListener viewChangeListener;
     
     // State
     private long currentView = 0;
@@ -46,6 +49,10 @@ public class HotStuffNode implements APLListener {
     // Quorum size
     private final int quorumSize;
     
+    // Failure detection for leader crash handling
+    private FailureDetector failureDetector;
+    private Thread leaderMonitorThread;
+    
     public HotStuffNode(int nodeId, List<Integer> nodeIds, AuthenticatedPerfectLinks apl,
                         ConsensusListener listener) {
         this.nodeId = nodeId;
@@ -54,24 +61,123 @@ public class HotStuffNode implements APLListener {
         this.listener = listener;
         this.quorumSize = nodeIds.size() / 2 + 1; // ⌈n/2⌉ + 1
         
+        // Initialize failure detector with 2-second timeout
+        this.failureDetector = new TimeoutFailureDetector(nodeIds, 2000);
+        
         // add genesis block
         log.add(Block.genesis());
     }
     
     /**
-     * Start the consensus node: register with APL and optionally trigger first proposal
-     * if this node is the first leader.
+     * Set a custom failure detector (mainly for testing).
+     */
+    public void setFailureDetector(FailureDetector fd) {
+        this.failureDetector = fd;
+    }
+    
+    /**
+     * Register a listener for view change events.
+     */
+    public void registerViewChangeListener(ViewChangeListener listener) {
+        this.viewChangeListener = listener;
+    }
+    
+    /**
+     * Start the consensus node: register with APL and start failure detector.
+     * Also begins monitoring for leader timeouts.
      */
     public void start() throws IOException {
         apl.registerListener(this);
         
-        // Do not broadcast new-view during start; caller should ensure all nodes are
-        // listening before any network traffic. This avoids race conditions in tests.
+        // Start failure detector
+        if (failureDetector != null) {
+            failureDetector.start();
+            // Also record a heartbeat for all nodes (alive at startup)
+            for (int id : nodeIds) {
+                failureDetector.heartbeat(id);
+            }
+        }
+        
+        // Start leader monitor thread to detect leader crashes
+        startLeaderMonitor();
+        
         if (nodeId == getLeader(currentView)) {
             System.out.println("[" + nodeId + "] I am the initial leader (view " + currentView + 
                               "). Ready to propose.");
         } else {
             System.out.println("[" + nodeId + "] I am a replica (view " + currentView + ").");
+        }
+    }
+    
+    /**
+     * Stop the consensus node: shut down failure detector and monitor.
+     */
+    public void stop() {
+        if (failureDetector != null) {
+            failureDetector.stop();
+        }
+        if (leaderMonitorThread != null) {
+            leaderMonitorThread.interrupt();
+        }
+    }
+    
+    /**
+     * Start a monitor thread that checks if the current leader is suspected crashed.
+     * If so, trigger a view change (timeout-based leader failure detection).
+     */
+    private void startLeaderMonitor() {
+        leaderMonitorThread = new Thread(() -> {
+            while (Thread.currentThread().isAlive()) {
+                try {
+                    Thread.sleep(500); // Check every 500ms
+                    
+                    if (failureDetector == null) break;
+                    
+                    synchronized (this) {
+                        int leader = getLeader(currentView);
+                        if (failureDetector.isSuspected(leader)) {
+                            System.out.println("[" + nodeId + "] Detected leader " + leader +
+                                             " crashed in view " + currentView + ". Triggering view change.");
+                            triggerViewChange(leader);
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+        }, "HS-leader-monitor-" + nodeId);
+        leaderMonitorThread.setDaemon(true);
+        leaderMonitorThread.start();
+    }
+    
+    /**
+     * Trigger a view change when current leader is suspected crashed.
+     * Advances to the next view and sends new-view message.
+     */
+    private void triggerViewChange(int suspectedLeader) {
+        long oldView = currentView;
+        currentView++;
+        pendingBlock = null;
+        prepareVotes.clear();
+        precommitVotes.clear();
+        commitVotes.clear();
+        newViewMessages.clear();
+        
+        System.out.println("[" + nodeId + "] Advanced to view " + currentView + 
+                          " (leader " + suspectedLeader + " suspected). New leader: " + 
+                          getLeader(currentView));
+        
+        // Notify view change listener
+        if (viewChangeListener != null) {
+            viewChangeListener.onViewChange(currentView, suspectedLeader);
+        }
+        
+        // Send new-view for the new view
+        try {
+            sendNewView();
+        } catch (IOException e) {
+            System.err.println("[" + nodeId + "] Failed to send new-view after FD timeout: " + 
+                              e.getMessage());
         }
     }
     
@@ -102,9 +208,16 @@ public class HotStuffNode implements APLListener {
     /**
      * Called by APL when a consensus message arrives (as application payload).
      * We need to deserialize and dispatch.
+     * 
+     * Also records a heartbeat from the sender (for failure detection).
      */
     @Override
     public void onMessage(int srcId, byte[] payload) {
+        // Record heartbeat from this sender (node is alive)
+        if (failureDetector != null) {
+            failureDetector.heartbeat(srcId);
+        }
+        
         try {
             HotStuffMessage msg = deserializeMessage(payload);
             handleMessage(msg);

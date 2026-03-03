@@ -229,4 +229,175 @@ class HotStuffNodeTest {
                         "Node " + h.getNodeId() + " should have genesis + 3 transactions");
         }
     }
+
+    @Test
+    void leaderCrashDetectionAndRecovery() throws Exception {
+        ArrayBlockingQueue<String> commits = new ArrayBlockingQueue<>(10);
+        ArrayBlockingQueue<Long> viewChanges = new ArrayBlockingQueue<>(100); // Larger queue for FD events
+        
+        // recreate nodes with commit and view change listeners
+        for (int i = 0; i < nodes.length; i++) {
+            final int nodeId = i;
+            nodes[i] = new HotStuffNode(i, Arrays.asList(0, 1, 2), aplNodes[i], block -> {
+                try {
+                    commits.offer(block.getData());  // Use offer to avoid blocking
+                } catch (Exception e) {
+                    // ignore
+                }
+            });
+            
+            // Register view change listener to track when view changes occur
+            nodes[i].registerViewChangeListener((newView, suspectedLeader) -> {
+                try {
+                    viewChanges.offer(newView);  // Use offer to avoid blocking
+                } catch (Exception e) {
+                    // ignore
+                }
+                System.out.println("Node " + nodeId + " detected view change to " + newView + 
+                                 " (suspected leader: " + suspectedLeader + ")");
+            });
+            
+            // Use LONGER timeout (1.5s) to avoid false suspicions during normal operation
+            // We'll shorten it later when testing actual crashes
+            FailureDetector fd = new TimeoutFailureDetector(Arrays.asList(0, 1, 2), 1500);
+            nodes[i].setFailureDetector(fd);
+            
+            aplNodes[i].registerListener(nodes[i]);
+            nodes[i].start();
+        }
+        
+        // Send initial new-view from replicas
+        nodes[1].sendNewView();
+        nodes[2].sendNewView();
+        
+        Thread.sleep(300);
+        
+        // Initial state: all in view 0, node 0 is leader
+        assertEquals(0, nodes[0].getCurrentView(), "Node 0 should start in view 0");
+        assertEquals(0, nodes[1].getCurrentView(), "Node 1 should start in view 0");
+        assertEquals(0, nodes[2].getCurrentView(), "Node 2 should start in view 0");
+        
+        // Node 0 (leader) proposes a transaction
+        nodes[0].propose("tx1");
+        
+        // All nodes should commit tx1 (3 commits, one from each node)
+        for (int i = 0; i < 3; i++) {
+            String tx = commits.poll(5, TimeUnit.SECONDS);
+            assertEquals("tx1", tx, "Expected tx1 commits");
+        }
+        
+        // After commit, all should be in view 1
+        Thread.sleep(500);
+        long node0View = nodes[0].getCurrentView();
+        long node1View = nodes[1].getCurrentView();
+        long node2View = nodes[2].getCurrentView();
+        
+        System.out.println("\nView after first commit: Node0=" + node0View + " Node1=" + node1View + " Node2=" + node2View);
+        assertEquals(1, node0View, "Node 0 should advance to view 1 after commit");
+        assertEquals(1, node1View, "Node 1 should advance to view 1 after commit");
+        assertEquals(1, node2View, "Node 2 should advance to view 1 after commit");
+        
+        // Clear view change queue before simulating crash
+        viewChanges.clear();
+        
+        // Now simulate leader crash: stop node 1 (the new leader in view 1)
+        // This makes APL unable to receive messages to node 1, simulating a crash
+        System.out.println("\n=== Simulating crash of node 1 (leader in view 1) ===");
+        aplNodes[1].stop();
+        Thread.sleep(100);
+        
+        // Other nodes should detect the crash and trigger view changes
+        // Wait for timeout to expire (1500ms) plus some margin
+        Thread.sleep(2000);
+        
+        // At least some nodes should have detected the crash and moved to view 2
+        long view2Node0 = nodes[0].getCurrentView();
+        long view2Node2 = nodes[2].getCurrentView();
+        
+        System.out.println("After leader crash detection:");
+        System.out.println("  Node 0 view: " + view2Node0);
+        System.out.println("  Node 2 view: " + view2Node2);
+        
+        assertTrue(view2Node0 >= 2 || view2Node2 >= 2, 
+                  "At least one node should detect leader crash and advance view");
+        
+        // Verify that node 1 still has committed data (crash doesn't lose committed data)
+        List<Block> log1 = nodes[1].getLog();
+        assertTrue(log1.stream().anyMatch(b -> "tx1".equals(b.getData())),
+                  "Node 1 should retain committed tx1 even after crash");
+    }
+
+    @Test
+    void multipleLeaderChangesUnderFailureDetection() throws Exception {
+        ArrayBlockingQueue<String> commits = new ArrayBlockingQueue<>(10);
+        
+        // For this test, use longer timeouts to avoid false suspicions from message delays
+        // We're testing that normal operation works with failure detection enabled
+        for (int i = 0; i < nodes.length; i++) {
+            nodes[i] = new HotStuffNode(i, Arrays.asList(0, 1, 2), aplNodes[i], block -> {
+                commits.add(block.getData());
+            });
+            
+            // Use 3-second timeout to allow for message delays without false suspicions
+            FailureDetector fd = new TimeoutFailureDetector(Arrays.asList(0, 1, 2), 3000);
+            nodes[i].setFailureDetector(fd);
+            
+            aplNodes[i].registerListener(nodes[i]);
+            nodes[i].start();
+        }
+        
+        // Send initial new-view
+        nodes[1].sendNewView();
+        nodes[2].sendNewView();
+        Thread.sleep(300);
+        
+        // View 0: Node 0 proposes tx1
+        System.out.println("\n=== View 0: Node 0 proposes tx1 ===");
+        nodes[0].propose("tx1");
+        
+        // Collect 3 commits from all nodes
+        for (int i = 0; i < 3; i++) {
+            String tx = commits.poll(5, TimeUnit.SECONDS);
+            assertEquals("tx1", tx, "Expected tx1 commits");
+        }
+        Thread.sleep(500);
+        
+        // After first proposal, view should have advanced to 1
+        assertTrue(nodes[0].getCurrentView() >= 1, "Should advance after commit");
+        assertTrue(nodes[1].getCurrentView() >= 1, "Should advance after commit");
+        assertTrue(nodes[2].getCurrentView() >= 1, "Should advance after commit");
+        
+        // View 1: Node 1 should be leader (view 1 % 3 = 1)
+        // Propose normally to show non-crash leader rotation still works
+        System.out.println("\n=== View 1: Node 1 proposes tx2 ===");
+        nodes[1].propose("tx2");
+        
+        // Collect 3 commits from all nodes
+        for (int i = 0; i < 3; i++) {
+            String tx = commits.poll(5, TimeUnit.SECONDS);
+            assertEquals("tx2", tx, "Expected tx2 commits");
+        }
+        Thread.sleep(500);
+        
+        // View 2: Node 2 is now leader (view 2 % 3 = 2)
+        System.out.println("\n=== View 2: Node 2 proposes tx3 ===");
+        nodes[2].propose("tx3");
+        
+        // Collect 3 commits from all nodes
+        for (int i = 0; i < 3; i++) {
+            String tx = commits.poll(5, TimeUnit.SECONDS);
+            assertEquals("tx3", tx, "Expected tx3 commits");
+        }
+        
+        // All nodes should have all 3 transactions
+        Thread.sleep(300);
+        for (HotStuffNode h : nodes) {
+            List<Block> log = h.getLog();
+            assertTrue(log.stream().anyMatch(b -> "tx1".equals(b.getData())));
+            assertTrue(log.stream().anyMatch(b -> "tx2".equals(b.getData())));
+            assertTrue(log.stream().anyMatch(b -> "tx3".equals(b.getData())));
+        }
+        
+        System.out.println("\nTest completed successfully with failure detection enabled!");
+    }
 }
