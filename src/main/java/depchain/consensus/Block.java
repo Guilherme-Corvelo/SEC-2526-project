@@ -5,8 +5,8 @@ import java.security.MessageDigest;
 
 /**
  * A block in the consensus protocol.
- * For Step 3, we simplify: a block is just a string of application data.
- * In later steps, it could include a parent hash, timestamp, etc.
+ * For Step 6, a block contains string application data (to be appended).
+ * In phase 2, it could include transaction details, parent hash, timestamp, etc.
  */
 public class Block implements Serializable {
     private static final long serialVersionUID = 1L;
