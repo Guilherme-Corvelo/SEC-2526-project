@@ -31,6 +31,7 @@ public class HotStuffNode implements APLListener {
     
     // State
     private long currentView = 0;
+    //TODO:  instead of deque use list
     private final Deque<Block> log = new ArrayDeque<>(); // committed blocks
     private Block pendingBlock = null; // block waiting for quorum
     
@@ -87,6 +88,7 @@ public class HotStuffNode implements APLListener {
      * Also begins monitoring for leader timeouts.
      */
     public void start() throws IOException {
+        //TODO: understand listener what shit he does
         apl.registerListener(this);
         
         // Start failure detector
@@ -155,7 +157,6 @@ public class HotStuffNode implements APLListener {
      * Advances to the next view and sends new-view message.
      */
     private void triggerViewChange(int suspectedLeader) {
-        long oldView = currentView;
         currentView++;
         pendingBlock = null;
         prepareVotes.clear();
@@ -227,7 +228,7 @@ public class HotStuffNode implements APLListener {
         }
     }
     
-    private synchronized void handleMessage(HotStuffMessage msg) {
+    protected synchronized void handleMessage(HotStuffMessage msg) {
         if (msg instanceof NewView) {
             handleNewView((NewView) msg);
         } else if (msg instanceof Prepare) {
@@ -247,7 +248,7 @@ public class HotStuffNode implements APLListener {
         }
     }
     
-    private void handleNewView(NewView msg) {
+    protected void handleNewView(NewView msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
         
         // Only leader processes new-view messages
@@ -278,7 +279,7 @@ public class HotStuffNode implements APLListener {
         }
     }
     
-    private void handlePrepare(Prepare msg) {
+    protected void handlePrepare(Prepare msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
         
         // Check view is current
@@ -288,6 +289,7 @@ public class HotStuffNode implements APLListener {
         }
         
         // Advance to this view if needed
+        //TODO: view it makes sense to propose same view number
         if (msg.getView() > currentView) {
             currentView = msg.getView();
             newViewMessages.clear();
@@ -327,7 +329,7 @@ public class HotStuffNode implements APLListener {
         System.out.println("[" + nodeId + "] Queued prepare vote: " + vote);
     }
     
-    private void handlePrepareVote(PrepareVote msg) {
+    protected void handlePrepareVote(PrepareVote msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
         
         // Only leader processes votes
@@ -357,7 +359,7 @@ public class HotStuffNode implements APLListener {
         }
     }
     
-    private void handlePreCommit(PreCommit msg) {
+    protected void handlePreCommit(PreCommit msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
         
         // Check view
@@ -375,7 +377,7 @@ public class HotStuffNode implements APLListener {
         System.out.println("[" + nodeId + "] Queued pre-commit vote: " + vote);
     }
     
-    private void handlePreCommitVote(PreCommitVote msg) {
+    protected void handlePreCommitVote(PreCommitVote msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
         
         if (nodeId != getLeader(currentView)) {
@@ -401,7 +403,7 @@ public class HotStuffNode implements APLListener {
         }
     }
     
-    private void handleCommit(Commit msg) {
+    protected void handleCommit(Commit msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
         
         if (msg.getView() < currentView) {
@@ -422,7 +424,7 @@ public class HotStuffNode implements APLListener {
                           " (now locked on view " + lockedQC.getView() + ")");
     }
     
-    private void handleCommitVote(CommitVote msg) {
+    protected void handleCommitVote(CommitVote msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
         
         if (nodeId != getLeader(currentView)) {
@@ -454,7 +456,7 @@ public class HotStuffNode implements APLListener {
         }
     }
     
-    private void handleDecide(Decide msg) {
+    protected void handleDecide(Decide msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
         
         if (msg.getView() < currentView) {
@@ -467,7 +469,7 @@ public class HotStuffNode implements APLListener {
     /**
      * Helper to commit the pending block, advance to next view, and send new-view.
      */
-    private void commitBlock(long view) {
+    protected void commitBlock(long view) {
         // Commit the block
         if (pendingBlock != null) {
             log.add(pendingBlock);
@@ -496,7 +498,7 @@ public class HotStuffNode implements APLListener {
         }
     }
     
-    private int getLeader(long view) {
+    protected int getLeader(long view) {
         return (int) (view % nodeIds.size());
     }
 
@@ -505,7 +507,7 @@ public class HotStuffNode implements APLListener {
      * No exceptions are propagated; failures are logged but the broadcast
      * proceeds to other nodes.
      */
-    private void broadcastConsensusMessage(HotStuffMessage msg) {
+    protected void broadcastConsensusMessage(HotStuffMessage msg) {
         byte[] payload = serializeMessage(msg);
         for (int id : nodeIds) {
             if (id == nodeId) continue;
@@ -518,7 +520,7 @@ public class HotStuffNode implements APLListener {
      * (e.g., the receive loop handler) is never blocked waiting for an ACK.
      * This prevents deadlocks when message handlers need to send responses.
      */
-    private void asyncSend(int dest, byte[] payload) {
+    protected void asyncSend(int dest, byte[] payload) {
         new Thread(() -> {
             try {
                 apl.send(dest, payload);
@@ -530,7 +532,7 @@ public class HotStuffNode implements APLListener {
     }
 
     
-    private byte[] serializeMessage(HotStuffMessage msg) {
+    protected byte[] serializeMessage(HotStuffMessage msg) {
         // use Java serialization for simplicity
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
              ObjectOutputStream oos = new ObjectOutputStream(bos)) {
@@ -542,7 +544,7 @@ public class HotStuffNode implements APLListener {
         }
     }
     
-    private HotStuffMessage deserializeMessage(byte[] payload) {
+    protected HotStuffMessage deserializeMessage(byte[] payload) {
         try (ByteArrayInputStream bis = new ByteArrayInputStream(payload);
              ObjectInputStream ois = new ObjectInputStream(bis)) {
             return (HotStuffMessage) ois.readObject();
@@ -561,5 +563,47 @@ public class HotStuffNode implements APLListener {
     
     public int getNodeId() {
         return nodeId;
+    }
+    
+    /**
+     * Protected accessors for subclasses (e.g., ByzantineHotStuffNode)
+     */
+    protected void setCurrentView(long view) {
+        this.currentView = view;
+    }
+    
+    protected void setPendingBlock(Block block) {
+        this.pendingBlock = block;
+    }
+    
+    protected Block getPendingBlock() {
+        return pendingBlock;
+    }
+    
+    protected QuorumCertificate getHighQC() {
+        return highQC;
+    }
+    
+    protected void setHighQC(QuorumCertificate qc) {
+        this.highQC = qc;
+    }
+    
+    protected QuorumCertificate getLockedQC() {
+        return lockedQC;
+    }
+    
+    protected void setLockedQC(QuorumCertificate qc) {
+        this.lockedQC = qc;
+    }
+    
+    protected int getQuorumSize() {
+        return quorumSize;
+    }
+    
+    protected void clearViewState() {
+        prepareVotes.clear();
+        precommitVotes.clear();
+        commitVotes.clear();
+        newViewMessages.clear();
     }
 }

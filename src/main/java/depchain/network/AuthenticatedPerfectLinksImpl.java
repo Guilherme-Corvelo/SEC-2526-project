@@ -162,6 +162,7 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
         while (running.get()) {
             try {
                 socket.receive(packet);
+                //TODO: refactor not used
                 if (dropNextReceive) {
                     dropNextReceive = false;
                     continue;
@@ -189,6 +190,7 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
                             // processing of the message.
                             sendAck(msg.srcId, msg.seq);
 
+                            //TODO: view listener not even initialized
                             if (listener != null) {
                                 // deliver payload without control byte
                                 byte[] app = new byte[msg.payload.length - 1];
@@ -246,6 +248,7 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
 
     private void handleAck(int srcId, long ackedSeq) {
         Long pending = sendPendingSeq.get(srcId);
+        //TODO: verify if acked seq can be null
         if (pending != null && pending == ackedSeq) {
             Object lock = sendLocks.get(srcId);
             if (lock != null) {
