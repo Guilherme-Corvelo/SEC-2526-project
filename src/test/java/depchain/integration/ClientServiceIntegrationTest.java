@@ -16,12 +16,18 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Integration tests for client → consensus → service flow.
  * 
- * Simulates:
+ * These tests verify the complete end-to-end architecture:
  * - Client submits data via ServiceClient
- * - Data reaches consensus layer
- * - Consensus commits block
- * - BlockchainService receives commit notification
+ * - Data is sent through APL to replicas
+ * - Replica buffers the client data as APL listener
+ * - Leader becomes ready to propose (after collecting quorum of new-view messages)
+ * - Replica automatically proposes buffered client data via ProposalReadyListener callback
+ * - Data flows through Byzantine HotStuff consensus (Prepare → Pre-commit → Commit with QCs)
+ * - BlockchainService receives committed blocks via ConsensusListener callback
  * - Data is persisted in append-only log
+ *
+ * Note: These tests use mock APL to focus on the consensus and service layers.
+ * Full integration tests with real networking are in ReplicaTest.
  */
 public class ClientServiceIntegrationTest {
     

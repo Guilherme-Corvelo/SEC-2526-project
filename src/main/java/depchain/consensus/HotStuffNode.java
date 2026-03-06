@@ -77,6 +77,13 @@ public class HotStuffNode implements APLListener {
     }
     
     /**
+     * Get the new-view messages map (for subclasses).
+     */
+    protected Map<Long, Map<Integer, NewView>> getNewViewMessages() {
+        return newViewMessages;
+    }
+    
+    /**
      * Register a listener for view change events.
      */
     public void registerViewChangeListener(ViewChangeListener listener) {

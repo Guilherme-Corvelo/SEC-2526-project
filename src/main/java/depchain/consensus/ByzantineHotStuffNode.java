@@ -26,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ByzantineHotStuffNode extends HotStuffNode {
     private final PrivateKey privateKey;
     private final Map<Integer, PublicKey> publicKeys;
+    private final ProposalReadyListener proposalReadyListener;
     
     // Equivocation detection: track which blocks each node has voted for per view
     private final Map<Long, Map<Integer, byte[]>> blockVotedInView = new ConcurrentHashMap<>();
@@ -37,11 +38,18 @@ public class ByzantineHotStuffNode extends HotStuffNode {
     public ByzantineHotStuffNode(int nodeId, List<Integer> nodeIds, AuthenticatedPerfectLinks apl,
                                  ConsensusListener listener, PrivateKey privateKey,
                                  Map<Integer, PublicKey> publicKeys) {
+        this(nodeId, nodeIds, apl, listener, privateKey, publicKeys, null);
+    }
+    
+    public ByzantineHotStuffNode(int nodeId, List<Integer> nodeIds, AuthenticatedPerfectLinks apl,
+                                 ConsensusListener listener, PrivateKey privateKey,
+                                 Map<Integer, PublicKey> publicKeys, ProposalReadyListener proposalListener) {
         // Initialize parent with crash-only consensus
         super(nodeId, nodeIds, apl, listener);
         
         this.privateKey = privateKey;
         this.publicKeys = new HashMap<>(publicKeys);
+        this.proposalReadyListener = proposalListener;
         
         // Byzantine quorum: 2f+1
         int n = nodeIds.size();
@@ -396,5 +404,12 @@ public class ByzantineHotStuffNode extends HotStuffNode {
         }
         
         System.out.println("[" + getNodeId() + "] Processing validated commit vote from " + vote.getSenderId());
+    }
+    
+    /**
+     * Check if this node is the current leader.
+     */
+    public boolean isCurrentLeader() {
+        return getNodeId() == getLeader(getCurrentView());
     }
 }
