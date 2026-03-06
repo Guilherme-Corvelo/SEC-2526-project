@@ -34,13 +34,13 @@ public class Replica implements APLListener, ConsensusListener, ProposalReadyLis
     private final ByzantineHotStuffNode consensusNode;
     private final BlockchainService blockchainService;
     private final Queue<String> clientDataBuffer;
-    private boolean isReadyToPropose;
+    private volatile long readyView;
 
     public Replica(int replicaId, List<Integer> allReplicaIds, AuthenticatedPerfectLinks apl,
                    PrivateKey privateKey, Map<Integer, PublicKey> publicKeys) {
         this.replicaId = replicaId;
         this.clientDataBuffer = new ConcurrentLinkedQueue<>();
-        this.isReadyToPropose = false;
+        this.readyView = -1;
 
         // Create blockchain service
         this.blockchainService = new BlockchainService();
@@ -69,7 +69,7 @@ public class Replica implements APLListener, ConsensusListener, ProposalReadyLis
             System.out.println("[Replica-" + replicaId + "] Buffered client data: \"" + clientData + "\"");
 
             // If this replica is the current leader and ready to propose, propose immediately
-            if (isCurrentLeader() && isReadyToPropose && !clientDataBuffer.isEmpty()) {
+            if (isCurrentLeader() && isReadyForCurrentView() && !clientDataBuffer.isEmpty()) {
                 proposeBufferedData();
             }
         } catch (Exception e) {
@@ -91,10 +91,10 @@ public class Replica implements APLListener, ConsensusListener, ProposalReadyLis
      * If we have buffered client data, propose it now.
      */
     public void onReadyToPropose() {
-        isReadyToPropose = true;
+        readyView = consensusNode.getCurrentView();
         System.out.println("[Replica-" + replicaId + "] Ready to propose blocks");
 
-        if (isCurrentLeader() && !clientDataBuffer.isEmpty()) {
+        if (isCurrentLeader() && isReadyForCurrentView() && !clientDataBuffer.isEmpty()) {
             proposeBufferedData();
         }
     }
@@ -119,6 +119,8 @@ public class Replica implements APLListener, ConsensusListener, ProposalReadyLis
 
         try {
             consensusNode.propose(combinedData.toString());
+            // Consume readiness for this view: this simple model proposes one block per ready view.
+            readyView = -1;
             System.out.println("[Replica-" + replicaId + "] Proposed block with " + count + " client submissions");
         } catch (Exception e) {
             System.err.println("[Replica-" + replicaId + "] Failed to propose: " + e.getMessage());
@@ -129,6 +131,10 @@ public class Replica implements APLListener, ConsensusListener, ProposalReadyLis
 
     private boolean isCurrentLeader() {
         return consensusNode.isCurrentLeader();
+    }
+
+    private boolean isReadyForCurrentView() {
+        return readyView == consensusNode.getCurrentView();
     }
 
     // Delegate methods to consensus node

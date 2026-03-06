@@ -2,10 +2,12 @@ package depchain.consensus;
 
 import depchain.network.APLListener;
 import depchain.network.AuthenticatedPerfectLinks;
+import depchain.network.AuthenticatedPerfectLinksImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
+import java.net.InetSocketAddress;
 import java.io.*;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -14,6 +16,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -290,6 +293,32 @@ class ByzantineHotStuffNodeTest {
         // QC validation should detect phase and block hash mismatches
         System.out.println("✓ QC validation checks phase and blockHash consistency");
     }
+
+    @Test
+    @DisplayName("Test 11: Notify proposal-ready listener on new-view quorum")
+    void testProposalReadyListenerOnNewViewQuorum() throws Exception {
+        List<Integer> nodeIds = Arrays.asList(0, 1, 2, 3);
+        MockAPL apl = new MockAPL();
+        MockConsensusListener consensusListener = new MockConsensusListener();
+        AtomicInteger readyCount = new AtomicInteger(0);
+
+        ByzantineHotStuffNode leader = new ByzantineHotStuffNode(
+            0, nodeIds, apl, consensusListener,
+            keyPairs.get(0).getPrivate(), publicKeys, readyCount::incrementAndGet
+        );
+        apl.setListener(leader);
+
+        leader.onMessage(1, serializeMessage(new NewView(0, 1, null)));
+        leader.onMessage(2, serializeMessage(new NewView(0, 2, null)));
+        assertEquals(0, readyCount.get(), "Listener should wait for quorum");
+
+        leader.onMessage(3, serializeMessage(new NewView(0, 3, null)));
+        assertEquals(1, readyCount.get(), "Listener should fire when quorum is reached");
+
+        // Duplicate sender should not trigger again for the same view.
+        leader.onMessage(3, serializeMessage(new NewView(0, 3, null)));
+        assertEquals(1, readyCount.get(), "Listener should fire once per view quorum");
+    }
     
     // ============ Helper Methods ============
     
@@ -359,5 +388,105 @@ class ByzantineHotStuffNodeTest {
         public void onCommit(Block block) {
             committedBlocks.add(block);
         }
+    }
+
+    // ========== Integration Tests with Real Networking and Failure Detection ==========
+    // These tests were previously in HotStuffNodeTest and now apply to ByzantineHotStuffNode
+    // since it's the only node class used in production
+    
+    @Test
+    @DisplayName("Real network: leader crash detection and recovery")
+    void leaderCrashDetectionAndRecoveryWithRealNetwork() throws Exception {
+        // Pure consensus test: ensure that if the leader crashes during proposal, a new
+        // leader can be elected and commit a new transaction. We do not carry over the
+        // original proposal, reflecting that a crashed leader might have been faulty.
+
+        int[] ports = {22000, 22001, 22002, 22003};
+        List<AuthenticatedPerfectLinksImpl> apl = new ArrayList<>();
+        List<ByzantineHotStuffNode> nodes = new ArrayList<>();
+        List<MockConsensusListener> listeners = new ArrayList<>();
+        List<Integer> nodeIds = new ArrayList<>();
+        Map<Integer, InetSocketAddress> addresses = new HashMap<>();
+        Map<Integer, java.security.PublicKey> pubKeys = new HashMap<>();
+        List<KeyPair> keyPairs = new ArrayList<>();
+
+        // setup keys and addresses
+        KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+        gen.initialize(2048);
+        for (int i = 0; i < ports.length; i++) {
+            KeyPair kp = gen.generateKeyPair();
+            keyPairs.add(kp);
+            addresses.put(i, new InetSocketAddress("localhost", ports[i]));
+            pubKeys.put(i, kp.getPublic());
+            nodeIds.add(i);
+        }
+
+        // start nodes
+        for (int i = 0; i < ports.length; i++) {
+            AuthenticatedPerfectLinksImpl aplNode = new AuthenticatedPerfectLinksImpl(
+                    i, ports[i], addresses, keyPairs.get(i).getPrivate(), pubKeys);
+            aplNode.setMaxSendDuration(5000);
+            aplNode.setResendTimeout(200);
+            apl.add(aplNode);
+
+            MockConsensusListener listener = new MockConsensusListener();
+            listeners.add(listener);
+            ByzantineHotStuffNode node = new ByzantineHotStuffNode(
+                i, nodeIds, aplNode, listener, keyPairs.get(i).getPrivate(), pubKeys);
+            FailureDetector fd = new TimeoutFailureDetector(nodeIds, 1500);
+            node.setFailureDetector(fd);
+            nodes.add(node);
+
+            aplNode.start();
+            node.start();
+        }
+
+        // non-leaders send new-view to let leader propose
+        for (int i = 1; i < ports.length; i++) {
+            nodes.get(i).sendNewView();
+        }
+        Thread.sleep(500);
+
+        // leader starts a proposal then crashes
+        nodes.get(0).propose("tx1_crash");
+        Thread.sleep(200);
+        System.out.println("Crashing leader node 0...");
+        nodes.get(0).stop();
+        apl.get(0).stop();
+
+        // we crashed the leader; now wait until at least one other replica
+        // advances its view.  to encourage progress we repeatedly nudge the
+        // remaining servers to broadcast new-view messages while polling.  as
+        // soon as a node's view increases we use that node both to compute the
+        // expected leader and to issue the next proposal.  this approach avoids
+        // racing against additional FD timeouts and prevents us from picking the
+        // crashed node.
+        ByzantineHotStuffNode elected = null;
+        long newView = -1;
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline && elected == null) {
+            for (int i = 1; i < ports.length; i++) {
+                nodes.get(i).sendNewView();
+                long v = nodes.get(i).getCurrentView();
+                if (v > 0) {
+                    elected = nodes.get(i);
+                    newView = v;
+                    break;
+                }
+            }
+            if (elected == null) {
+                Thread.sleep(100);
+            }
+        }
+        assertNotNull(elected, "At least one surviving node should advance view");
+        int leaderNow = elected.getLeader(newView);
+        assertEquals(elected.getNodeId(), leaderNow,
+                "The node that advanced should be leader for that view");
+        System.out.println("Node " + leaderNow + " is the elected leader for view " + newView);
+
+        // perform a proposal from the newly elected leader; if the view has
+        // already rolled forward again this will throw, which would surface an
+        // issue in our timing logic.
+        elected.propose("tx_after");
     }
 }

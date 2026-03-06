@@ -238,16 +238,10 @@ public class HotStuffNode implements APLListener {
     protected synchronized void handleMessage(HotStuffMessage msg) {
         if (msg instanceof NewView) {
             handleNewView((NewView) msg);
-        } else if (msg instanceof Prepare) {
-            handlePrepare((Prepare) msg);
         } else if (msg instanceof PrepareVote) {
             handlePrepareVote((PrepareVote) msg);
-        } else if (msg instanceof PreCommit) {
-            handlePreCommit((PreCommit) msg);
         } else if (msg instanceof PreCommitVote) {
             handlePreCommitVote((PreCommitVote) msg);
-        } else if (msg instanceof Commit) {
-            handleCommit((Commit) msg);
         } else if (msg instanceof CommitVote) {
             handleCommitVote((CommitVote) msg);
         } else if (msg instanceof Decide) {
@@ -265,10 +259,10 @@ public class HotStuffNode implements APLListener {
         
         // Collect new-view messages for this view
         Map<Integer, NewView> views = newViewMessages.computeIfAbsent(msg.getView(), k -> new ConcurrentHashMap<>());
-        views.put(msg.getSenderId(), msg);
+        boolean isNewSender = views.put(msg.getSenderId(), msg) == null;
         
         // Once we have a quorum of new-view messages, proceed with prepare phase
-        if (views.size() >= quorumSize) {
+        if (isNewSender && views.size() == quorumSize) {
             // Select highQC: the highest view QC from the new-view messages
             QuorumCertificate selectedQC = highQC;
             for (NewView nv : views.values()) {
@@ -283,57 +277,15 @@ public class HotStuffNode implements APLListener {
             System.out.println("[" + nodeId + "] Collected quorum of new-view messages. " +
                               "Selected highQC: " + (highQC != null ? highQC.toString() : "null"));
             // Ready to propose a new block
+            onNewViewQuorum(msg.getView());
         }
     }
-    
-    protected void handlePrepare(Prepare msg) {
-        System.out.println("[" + nodeId + "] Received: " + msg);
-        
-        // Check view is current
-        if (msg.getView() < currentView) {
-            System.out.println("[" + nodeId + "] Ignoring prepare for old view " + msg.getView());
-            return;
-        }
-        
-        // Advance to this view if needed
-        //TODO: view it makes sense to propose same view number
-        if (msg.getView() > currentView) {
-            currentView = msg.getView();
-            newViewMessages.clear();
-            prepareVotes.clear();
-            precommitVotes.clear();
-            commitVotes.clear();
-        }
-        
-        // Apply safeNode predicate: accept if extends from lockedQC or justify has higher view
-        Block block = msg.getNode();
-        QuorumCertificate justify = msg.getJustify();
-        
-        boolean safe = false;
-        if (lockedQC == null) {
-            // No lock yet, safe to accept
-            safe = true;
-        } else if (justify != null && justify.getView() > lockedQC.getView()) {
-            // Justify has higher view than lock, safe
-            safe = true;
-        } else if (justify != null && Arrays.equals(justify.getBlockHash(), 
-                   lockedQC.getBlockHash())) {
-            // Same branch as lock, safe
-            safe = true;
-        }
-        
-        if (!safe) {
-            System.out.println("[" + nodeId + "] Rejected prepare (safeNode predicate failed)");
-            return;
-        }
-        
-        // Accept the block
-        pendingBlock = block;
-        
-        // Send prepare vote back to leader (asynchronously)
-        PrepareVote vote = new PrepareVote(currentView, nodeId, block.getHash());
-        asyncSend(msg.getSenderId(), serializeMessage(vote));
-        System.out.println("[" + nodeId + "] Queued prepare vote: " + vote);
+
+    /**
+     * Hook for subclasses that need to react when the leader reaches new-view quorum.
+     */
+    protected void onNewViewQuorum(long view) {
+        // no-op by default
     }
     
     protected void handlePrepareVote(PrepareVote msg) {
@@ -366,24 +318,6 @@ public class HotStuffNode implements APLListener {
         }
     }
     
-    protected void handlePreCommit(PreCommit msg) {
-        System.out.println("[" + nodeId + "] Received: " + msg);
-        
-        // Check view
-        if (msg.getView() < currentView) {
-            return;
-        }
-        
-        if (msg.getView() > currentView) {
-            currentView = msg.getView();
-        }
-        
-        // Accept and send pre-commit vote (asynchronously)
-        PreCommitVote vote = new PreCommitVote(currentView, nodeId, msg.getPrepareQC().getBlockHash());
-        asyncSend(msg.getSenderId(), serializeMessage(vote));
-        System.out.println("[" + nodeId + "] Queued pre-commit vote: " + vote);
-    }
-    
     protected void handlePreCommitVote(PreCommitVote msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
         
@@ -409,27 +343,7 @@ public class HotStuffNode implements APLListener {
             }
         }
     }
-    
-    protected void handleCommit(Commit msg) {
-        System.out.println("[" + nodeId + "] Received: " + msg);
-        
-        if (msg.getView() < currentView) {
-            return;
-        }
-        
-        if (msg.getView() > currentView) {
-            currentView = msg.getView();
-        }
-        
-        // Set lockedQC (this is critical for safety)
-        lockedQC = msg.getPrecommitQC();
-        
-        // Send commit vote (asynchronously)
-        CommitVote vote = new CommitVote(currentView, nodeId, msg.getPrecommitQC().getBlockHash());
-        asyncSend(msg.getSenderId(), serializeMessage(vote));
-        System.out.println("[" + nodeId + "] Queued commit vote: " + vote +
-                          " (now locked on view " + lockedQC.getView() + ")");
-    }
+
     
     protected void handleCommitVote(CommitVote msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);

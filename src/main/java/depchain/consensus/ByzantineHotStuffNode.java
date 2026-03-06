@@ -61,16 +61,22 @@ public class ByzantineHotStuffNode extends HotStuffNode {
     }
     
     /**
-     * Override handleMessage to route SignedVote messages to validation.
+     * Override handleMessage to handle consensus messages and route SignedVote to validation.
      * This is the critical entry point for Byzantine protection.
      */
     @Override
     protected synchronized void handleMessage(HotStuffMessage msg) {
-        if (msg instanceof SignedVote) {
+        if (msg instanceof Prepare) {
+            handlePrepare((Prepare) msg);
+        } else if (msg instanceof PreCommit) {
+            handlePreCommit((PreCommit) msg);
+        } else if (msg instanceof Commit) {
+            handleCommit((Commit) msg);
+        } else if (msg instanceof SignedVote) {
             // Route to validation before processing
             handleSignedVote((SignedVote) msg);
-        } else {
-            // Delegate all other message types to parent
+
+        } else{
             super.handleMessage(msg);
         }
     }
@@ -84,10 +90,8 @@ public class ByzantineHotStuffNode extends HotStuffNode {
     }
     
     /**
-     * Override parent's handlePrepare to apply safeNode predicate.
-     * Byzantine variant validates QC signatures and creates a signed vote.
+     * Byzantine variant of handlePrepare: validates QC signatures and applies safeNode predicate.
      */
-    @Override
     protected void handlePrepare(Prepare msg) {
         System.out.println("[" + getNodeId() + "] Received: " + msg);
         
@@ -143,9 +147,8 @@ public class ByzantineHotStuffNode extends HotStuffNode {
     }
     
     /**
-     * Override handlePreCommit to validate QC and create signed vote.
+     * Byzantine variant of handlePreCommit: validates QC and creates signed vote.
      */
-    @Override
     protected void handlePreCommit(PreCommit msg) {
         System.out.println("[" + getNodeId() + "] Received: " + msg);
         
@@ -177,9 +180,8 @@ public class ByzantineHotStuffNode extends HotStuffNode {
     }
     
     /**
-     * Override handleCommit to validate QC and create signed vote.
+     * Byzantine variant of handleCommit: validates QC and tracks lockedQC.
      */
-    @Override
     protected void handleCommit(Commit msg) {
         System.out.println("[" + getNodeId() + "] Received: " + msg);
         
@@ -411,5 +413,16 @@ public class ByzantineHotStuffNode extends HotStuffNode {
      */
     public boolean isCurrentLeader() {
         return getNodeId() == getLeader(getCurrentView());
+    }
+
+    @Override
+    protected void onNewViewQuorum(long view) {
+        if (proposalReadyListener == null) {
+            return;
+        }
+        if (!isCurrentLeader() || view != getCurrentView()) {
+            return;
+        }
+        proposalReadyListener.onReadyToPropose();
     }
 }
