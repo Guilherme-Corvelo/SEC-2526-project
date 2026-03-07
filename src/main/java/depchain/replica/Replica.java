@@ -1,9 +1,8 @@
 package depchain.replica;
 
 import depchain.consensus.Block;
-import depchain.consensus.ByzantineHotStuffNode;
-import depchain.consensus.ConsensusListener;
 import depchain.consensus.HotStuffNode;
+import depchain.consensus.ConsensusListener;
 import depchain.consensus.ProposalReadyListener;
 import depchain.network.APLListener;
 import depchain.network.AuthenticatedPerfectLinks;
@@ -21,7 +20,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * Replica: A blockchain replica that handles both consensus and client requests.
  *
  * This class integrates:
- * - Byzantine consensus protocol (ByzantineHotStuffNode)
+ * - Byzantine consensus protocol (HotStuffNode)
  * - Client data buffering and processing
  * - Blockchain service for committed blocks
  *
@@ -31,7 +30,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class Replica implements APLListener, ConsensusListener, ProposalReadyListener {
     private final int replicaId;
-    private final ByzantineHotStuffNode consensusNode;
+    private final HotStuffNode consensusNode;
     private final BlockchainService blockchainService;
     private final Queue<String> clientDataBuffer;
     private volatile long readyView;
@@ -46,7 +45,7 @@ public class Replica implements APLListener, ConsensusListener, ProposalReadyLis
         this.blockchainService = new BlockchainService();
 
         // Create consensus node with this replica as listener
-        this.consensusNode = new ByzantineHotStuffNode(
+        this.consensusNode = new HotStuffNode(
             replicaId, allReplicaIds, apl, this, privateKey, publicKeys, this
         );
 
@@ -160,7 +159,7 @@ public class Replica implements APLListener, ConsensusListener, ProposalReadyLis
     }
 
     // Access to consensus node for testing/advanced operations
-    public ByzantineHotStuffNode getConsensusNode() {
+    public HotStuffNode getConsensusNode() {
         return consensusNode;
     }
 }

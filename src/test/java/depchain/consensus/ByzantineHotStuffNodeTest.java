@@ -14,14 +14,12 @@ import java.security.KeyPairGenerator;
 import java.security.PublicKey;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests for ByzantineHotStuffNode: Byzantine Fault Tolerant HotStuff consensus.
+ * Tests for HotStuffNode: Byzantine Fault Tolerant HotStuff consensus.
  * 
  * Tests cover:
  * 1. Signature validation (protection against forged votes)
@@ -30,8 +28,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * 4. Replay attack prevention
  * 5. Byzantine quorum size (2f+1)
  */
-class ByzantineHotStuffNodeTest {
-    private List<ByzantineHotStuffNode> nodes;
+class HotStuffNodeTest {
+    private List<HotStuffNode> nodes;
     private List<MockAPL> mockAPLs;
     private List<KeyPair> keyPairs;
     private Map<Integer, PublicKey> publicKeys;
@@ -67,7 +65,7 @@ class ByzantineHotStuffNodeTest {
             
             MockConsensusListener listener = new MockConsensusListener();
             
-            ByzantineHotStuffNode node = new ByzantineHotStuffNode(
+            HotStuffNode node = new HotStuffNode(
                 i,
                 nodeIds,
                 apl,
@@ -84,7 +82,7 @@ class ByzantineHotStuffNodeTest {
     @Test
     @DisplayName("Test 1: Reject forged votes (invalid signatures)")
     void testRejectForgedVotes() throws Exception {
-        ByzantineHotStuffNode node = nodes.get(0);
+        HotStuffNode node = nodes.get(0);
         
         // Create a vote with a fake signature
         byte[] fakeSignature = new byte[256]; // Invalid RSA signature
@@ -102,8 +100,8 @@ class ByzantineHotStuffNodeTest {
     @Test
     @DisplayName("Test 2: Accept valid signed votes")
     void testAcceptValidSignedVotes() throws Exception {
-        ByzantineHotStuffNode votingNode = nodes.get(1);
-        ByzantineHotStuffNode leaderNode = nodes.get(0);  // Node 0 is leader in view 0
+        HotStuffNode votingNode = nodes.get(1);
+        HotStuffNode leaderNode = nodes.get(0);  // Node 0 is leader in view 0
         
         // Create a valid signed vote from node 1
         byte[] blockHash = hashBlock("block1");
@@ -120,7 +118,7 @@ class ByzantineHotStuffNodeTest {
     @Test
     @DisplayName("Test 3: Detect equivocation (voting for different blocks in same view)")
     void testDetectEquivocation() throws Exception {
-        ByzantineHotStuffNode leaderNode = nodes.get(0);
+        HotStuffNode leaderNode = nodes.get(0);
         
         byte[] blockA = hashBlock("blockA");
         byte[] blockB = hashBlock("blockB");
@@ -142,11 +140,11 @@ class ByzantineHotStuffNodeTest {
     @Test
     @DisplayName("Test 4: Validate QC signatures (reject QC with invalid votes)")
     void testValidateQCSignatures() throws Exception {
-        ByzantineHotStuffNode node = nodes.get(0);
+        HotStuffNode node = nodes.get(0);
         
         // Create a QC with 2 valid votes and 1 invalid vote
         byte[] blockHash = hashBlock("block1");
-        ByzantineQuorumCertificate qc = new ByzantineQuorumCertificate(0, "prepare", blockHash, 3);
+        QuorumCertificate qc = new QuorumCertificate(0, "prepare", blockHash, 3);
         
         // Add 2 valid votes
         SignedVote vote1 = createSignedVote(1, 0, blockHash, "prepare");
@@ -174,10 +172,10 @@ class ByzantineHotStuffNodeTest {
     @DisplayName("Test 5: Reject QC without Byzantine quorum (2f+1)")
     void testRejectInsufficientQC() throws Exception {
         // For n=4, f=1, need 3 votes minimum
-        ByzantineHotStuffNode node = nodes.get(0);
+        HotStuffNode node = nodes.get(0);
         
         byte[] blockHash = hashBlock("block1");
-        ByzantineQuorumCertificate qc = new ByzantineQuorumCertificate(0, "prepare", blockHash, 3);
+        QuorumCertificate qc = new QuorumCertificate(0, "prepare", blockHash, 3);
         
         // Add only 1 vote (need 3)
         SignedVote vote1 = createSignedVote(1, 0, blockHash, "prepare");
@@ -196,8 +194,8 @@ class ByzantineHotStuffNodeTest {
     @Test
     @DisplayName("Test 6: Reject replay attacks (view number in signature)")
     void testRejectReplayAttacks() throws Exception {
-        ByzantineHotStuffNode leaderNode = nodes.get(0);
-        ByzantineHotStuffNode votingNode = nodes.get(1);
+        HotStuffNode leaderNode = nodes.get(0);
+        HotStuffNode votingNode = nodes.get(1);
         
         byte[] blockHash = hashBlock("block1");
         
@@ -220,7 +218,7 @@ class ByzantineHotStuffNodeTest {
         // - Crash-only quorum: ⌈4/2⌉+1 = 3
         // - Byzantine quorum: 2*1+1 = 3 (f = (4-1)/3 = 1)
         
-        ByzantineHotStuffNode node = nodes.get(0);
+        HotStuffNode node = nodes.get(0);
         int quorumSize = node.getQuorumSize();
         
         // With f=1, need 2f+1 = 3 votes
@@ -231,7 +229,7 @@ class ByzantineHotStuffNodeTest {
     @Test
     @DisplayName("Test 8: Verify signature includes view, blockHash, and phase")
     void testSignatureCoversAllFields() throws Exception {
-        ByzantineHotStuffNode node = nodes.get(1);
+        HotStuffNode node = nodes.get(1);
         
         byte[] blockHash = hashBlock("test");
         
@@ -252,10 +250,10 @@ class ByzantineHotStuffNodeTest {
     @Test
     @DisplayName("Test 9: Detect duplicate signers in QC")
     void testDetectDuplicateSigners() throws Exception {
-        ByzantineHotStuffNode node = nodes.get(0);
+        HotStuffNode node = nodes.get(0);
         
         byte[] blockHash = hashBlock("block1");
-        ByzantineQuorumCertificate qc = new ByzantineQuorumCertificate(0, "prepare", blockHash, 3);
+        QuorumCertificate qc = new QuorumCertificate(0, "prepare", blockHash, 3);
         
         // Add same voter twice with different votes (should be caught)
         SignedVote voteA = createSignedVote(1, 0, blockHash, "prepare");
@@ -274,10 +272,10 @@ class ByzantineHotStuffNodeTest {
     @Test
     @DisplayName("Test 10: QC validates all signature fields match")
     void testQCValidatesFieldConsistency() throws Exception {
-        ByzantineHotStuffNode node = nodes.get(0);
+        HotStuffNode node = nodes.get(0);
         
         byte[] blockHash = hashBlock("block1");
-        ByzantineQuorumCertificate qc = new ByzantineQuorumCertificate(0, "prepare", blockHash, 3);
+        QuorumCertificate qc = new QuorumCertificate(0, "prepare", blockHash, 3);
         
         // Add votes with matching fields
         SignedVote vote1 = createSignedVote(1, 0, blockHash, "prepare");
@@ -302,7 +300,7 @@ class ByzantineHotStuffNodeTest {
         MockConsensusListener consensusListener = new MockConsensusListener();
         AtomicInteger readyCount = new AtomicInteger(0);
 
-        ByzantineHotStuffNode leader = new ByzantineHotStuffNode(
+        HotStuffNode leader = new HotStuffNode(
             0, nodeIds, apl, consensusListener,
             keyPairs.get(0).getPrivate(), publicKeys, readyCount::incrementAndGet
         );
@@ -324,12 +322,12 @@ class ByzantineHotStuffNodeTest {
     
     private SignedVote createSignedVote(int nodeId, long view, byte[] blockHash, String phase) 
             throws Exception {
-        ByzantineHotStuffNode node = nodes.get(nodeId);
+        HotStuffNode node = nodes.get(nodeId);
         // Access the private method via reflection to create a signed vote
         // For testing, we use the node's own signing capability
         
         // Use Java reflection to call private method
-        var method = ByzantineHotStuffNode.class.getDeclaredMethod(
+        var method = HotStuffNode.class.getDeclaredMethod(
             "createSignedVote", long.class, byte[].class, String.class
         );
         method.setAccessible(true);
@@ -391,7 +389,7 @@ class ByzantineHotStuffNodeTest {
     }
 
     // ========== Integration Tests with Real Networking and Failure Detection ==========
-    // These tests were previously in HotStuffNodeTest and now apply to ByzantineHotStuffNode
+    // These tests were previously in HotStuffNodeTest and now apply to HotStuffNode
     // since it's the only node class used in production
     
     @Test
@@ -403,7 +401,7 @@ class ByzantineHotStuffNodeTest {
 
         int[] ports = {22000, 22001, 22002, 22003};
         List<AuthenticatedPerfectLinksImpl> apl = new ArrayList<>();
-        List<ByzantineHotStuffNode> nodes = new ArrayList<>();
+        List<HotStuffNode> nodes = new ArrayList<>();
         List<MockConsensusListener> listeners = new ArrayList<>();
         List<Integer> nodeIds = new ArrayList<>();
         Map<Integer, InetSocketAddress> addresses = new HashMap<>();
@@ -431,7 +429,7 @@ class ByzantineHotStuffNodeTest {
 
             MockConsensusListener listener = new MockConsensusListener();
             listeners.add(listener);
-            ByzantineHotStuffNode node = new ByzantineHotStuffNode(
+            HotStuffNode node = new HotStuffNode(
                 i, nodeIds, aplNode, listener, keyPairs.get(i).getPrivate(), pubKeys);
             FailureDetector fd = new TimeoutFailureDetector(nodeIds, 1500);
             node.setFailureDetector(fd);
@@ -461,7 +459,7 @@ class ByzantineHotStuffNodeTest {
         // expected leader and to issue the next proposal.  this approach avoids
         // racing against additional FD timeouts and prevents us from picking the
         // crashed node.
-        ByzantineHotStuffNode elected = null;
+        HotStuffNode elected = null;
         long newView = -1;
         long deadline = System.currentTimeMillis() + 5000;
         while (System.currentTimeMillis() < deadline && elected == null) {

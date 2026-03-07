@@ -2,7 +2,6 @@ package depchain.integration;
 
 import depchain.client.ServiceClient;
 import depchain.consensus.Block;
-import depchain.consensus.ConsensusListener;
 import depchain.network.APLListener;
 import depchain.network.AuthenticatedPerfectLinks;
 import depchain.service.BlockchainService;

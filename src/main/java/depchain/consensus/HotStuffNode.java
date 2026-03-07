@@ -3,123 +3,143 @@ package depchain.consensus;
 import depchain.network.APLListener;
 import depchain.network.AuthenticatedPerfectLinks;
 
-import java.io.IOException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.util.*;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.Signature;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * HotStuffNode: A single replica in the Basic HotStuff consensus protocol.
- * 
- * For Step 4 (crash-only faults with failure detection):
- * - Implements the full protocol flow (propose, vote, commit).
- * - Uses authenticated perfect links for message delivery.
- * - Integrates timeout-based failure detection to handle leader crashes.
- * - Automatically triggers view changes when leader is suspected crashed.
- * - Maintains a log of committed blocks.
- * - Notifies listeners when blocks are committed or view changes occur.
+ * ByzantineHotStuffNode: A replica in the Byzantine Fault Tolerant HotStuff consensus protocol.
+ *
+ * Implements HotStuff with cryptographic signatures and Byzantine quorum certificates.
  */
 public class HotStuffNode implements APLListener {
     private final int nodeId;
     private final List<Integer> nodeIds;
     private final AuthenticatedPerfectLinks apl;
     private final ConsensusListener listener;
+    private final PrivateKey privateKey;
+    private final Map<Integer, PublicKey> publicKeys;
+    private final ProposalReadyListener proposalReadyListener;
+
     private ViewChangeListener viewChangeListener;
-    
+
     // State
     private long currentView = 0;
-    //TODO:  instead of deque use list
-    private final Deque<Block> log = new ArrayDeque<>(); // committed blocks
-    private Block pendingBlock = null; // block waiting for quorum
-    
-    // Quorum Certificates: highest prepareQC and lockedQC
-    private QuorumCertificate highQC = null; // highest prepareQC seen
-    private QuorumCertificate lockedQC = null; // locked QC (safety guard)
-    
-    // Tracking votes and messages per phase and view
-    private final Map<Long, Map<Integer, byte[]>> prepareVotes = new ConcurrentHashMap<>();
-    private final Map<Long, Map<Integer, byte[]>> precommitVotes = new ConcurrentHashMap<>();
-    private final Map<Long, Map<Integer, byte[]>> commitVotes = new ConcurrentHashMap<>();
-    
-    // New-view messages received at start of new view
+    private final Deque<Block> log = new ArrayDeque<>();
+    private Block pendingBlock = null;
+
+    // Highest QC and lock for safety
+    private QuorumCertificate highQC = null;
+    private QuorumCertificate lockedQC = null;
+
+    // New-view messages received at start of a view
     private final Map<Long, Map<Integer, NewView>> newViewMessages = new ConcurrentHashMap<>();
-    
-    // Quorum size
-    private final int quorumSize;
-    
+
+    // Signed vote aggregation per phase and view
+    private final Map<Long, Map<Integer, SignedVote>> prepareSignedVotes = new ConcurrentHashMap<>();
+    private final Map<Long, Map<Integer, SignedVote>> precommitSignedVotes = new ConcurrentHashMap<>();
+    private final Map<Long, Map<Integer, SignedVote>> commitSignedVotes = new ConcurrentHashMap<>();
+
+    // Equivocation detection: node -> block hash voted in a given view
+    private final Map<Long, Map<Integer, byte[]>> blockVotedInView = new ConcurrentHashMap<>();
+
+    // Guards to avoid duplicate phase broadcasts for the same view
+    private final Set<Long> precommitBroadcastedViews = ConcurrentHashMap.newKeySet();
+    private final Set<Long> commitBroadcastedViews = ConcurrentHashMap.newKeySet();
+    private final Set<Long> decideBroadcastedViews = ConcurrentHashMap.newKeySet();
+
+    // Byzantine quorum: 2f+1 where f = floor((n-1)/3)
+    private final int byzantineQuorumSize;
+    private final int maxFaults;
+
     // Failure detection for leader crash handling
     private FailureDetector failureDetector;
     private Thread leaderMonitorThread;
-    
+
     public HotStuffNode(int nodeId, List<Integer> nodeIds, AuthenticatedPerfectLinks apl,
-                        ConsensusListener listener) {
+                                 ConsensusListener listener, PrivateKey privateKey,
+                                 Map<Integer, PublicKey> publicKeys) {
+        this(nodeId, nodeIds, apl, listener, privateKey, publicKeys, null);
+    }
+
+    public HotStuffNode(int nodeId, List<Integer> nodeIds, AuthenticatedPerfectLinks apl,
+                                 ConsensusListener listener, PrivateKey privateKey,
+                                 Map<Integer, PublicKey> publicKeys, ProposalReadyListener proposalListener) {
         this.nodeId = nodeId;
         this.nodeIds = new ArrayList<>(nodeIds);
         this.apl = apl;
         this.listener = listener;
-        this.quorumSize = nodeIds.size() / 2 + 1; // ⌈n/2⌉ + 1
-        
-        // Initialize failure detector with 2-second timeout
+        this.privateKey = privateKey;
+        this.publicKeys = new HashMap<>(publicKeys);
+        this.proposalReadyListener = proposalListener;
+
+        int n = nodeIds.size();
+        this.maxFaults = (n - 1) / 3;
+        this.byzantineQuorumSize = 2 * maxFaults + 1;
+
         this.failureDetector = new TimeoutFailureDetector(nodeIds, 2000);
-        
-        // add genesis block
+
         log.add(Block.genesis());
+
+        System.out.println("[" + nodeId + "] Byzantine HotStuff initialized: n=" + n +
+                ", f=" + maxFaults + ", quorumSize=" + byzantineQuorumSize);
     }
-    
+
     /**
      * Set a custom failure detector (mainly for testing).
      */
     public void setFailureDetector(FailureDetector fd) {
         this.failureDetector = fd;
     }
-    
-    /**
-     * Get the new-view messages map (for subclasses).
-     */
-    protected Map<Long, Map<Integer, NewView>> getNewViewMessages() {
-        return newViewMessages;
-    }
-    
+
     /**
      * Register a listener for view change events.
      */
     public void registerViewChangeListener(ViewChangeListener listener) {
         this.viewChangeListener = listener;
     }
-    
+
     /**
      * Start the consensus node: register with APL and start failure detector.
-     * Also begins monitoring for leader timeouts.
      */
     public void start() throws IOException {
-        //TODO: understand listener what shit he does
         apl.registerListener(this);
-        
-        // Start failure detector
+
         if (failureDetector != null) {
             failureDetector.start();
-            // Also record a heartbeat for all nodes (alive at startup)
             for (int id : nodeIds) {
                 failureDetector.heartbeat(id);
             }
         }
-        
-        // Start leader monitor thread to detect leader crashes
+
         startLeaderMonitor();
-        
+
         if (nodeId == getLeader(currentView)) {
-            System.out.println("[" + nodeId + "] I am the initial leader (view " + currentView + 
-                              "). Ready to propose.");
+            System.out.println("[" + nodeId + "] I am the initial leader (view " + currentView +
+                    "). Ready to propose.");
         } else {
             System.out.println("[" + nodeId + "] I am a replica (view " + currentView + ").");
         }
     }
-    
+
     /**
-     * Stop the consensus node: shut down failure detector and monitor.
+     * Stop the consensus node.
      */
     public void stop() {
         if (failureDetector != null) {
@@ -129,24 +149,22 @@ public class HotStuffNode implements APLListener {
             leaderMonitorThread.interrupt();
         }
     }
-    
-    /**
-     * Start a monitor thread that checks if the current leader is suspected crashed.
-     * If so, trigger a view change (timeout-based leader failure detection).
-     */
+
     private void startLeaderMonitor() {
         leaderMonitorThread = new Thread(() -> {
             while (Thread.currentThread().isAlive()) {
                 try {
-                    Thread.sleep(500); // Check every 500ms
-                    
-                    if (failureDetector == null) break;
-                    
+                    Thread.sleep(500);
+
+                    if (failureDetector == null) {
+                        break;
+                    }
+
                     synchronized (this) {
                         int leader = getLeader(currentView);
                         if (failureDetector.isSuspected(leader)) {
                             System.out.println("[" + nodeId + "] Detected leader " + leader +
-                                             " crashed in view " + currentView + ". Triggering view change.");
+                                    " crashed in view " + currentView + ". Triggering view change.");
                             triggerViewChange(leader);
                         }
                     }
@@ -154,78 +172,66 @@ public class HotStuffNode implements APLListener {
                     break;
                 }
             }
-        }, "HS-leader-monitor-" + nodeId);
+        }, "BHS-leader-monitor-" + nodeId);
         leaderMonitorThread.setDaemon(true);
         leaderMonitorThread.start();
     }
-    
+
     /**
      * Trigger a view change when current leader is suspected crashed.
-     * Advances to the next view and sends new-view message.
      */
     private void triggerViewChange(int suspectedLeader) {
         currentView++;
         pendingBlock = null;
-        prepareVotes.clear();
-        precommitVotes.clear();
-        commitVotes.clear();
-        newViewMessages.clear();
-        
-        System.out.println("[" + nodeId + "] Advanced to view " + currentView + 
-                          " (leader " + suspectedLeader + " suspected). New leader: " + 
-                          getLeader(currentView));
-        
-        // Notify view change listener
+        clearViewState();
+
+        System.out.println("[" + nodeId + "] Advanced to view " + currentView +
+                " (leader " + suspectedLeader + " suspected). New leader: " +
+                getLeader(currentView));
+
         if (viewChangeListener != null) {
             viewChangeListener.onViewChange(currentView, suspectedLeader);
         }
-        
-        // Send new-view for the new view
+
         try {
             sendNewView();
         } catch (IOException e) {
-            System.err.println("[" + nodeId + "] Failed to send new-view after FD timeout: " + 
-                              e.getMessage());
+            System.err.println("[" + nodeId + "] Failed to send new-view after FD timeout: " +
+                    e.getMessage());
         }
     }
-    
+
+    /**
+     * Send a new-view message with this node's highest QC.
+     */
     public void sendNewView() throws IOException {
         NewView msg = new NewView(currentView, nodeId, highQC);
         broadcastConsensusMessage(msg);
     }
-    
+
     /**
      * Called by the application layer to propose a new block.
-     * Only the current leader should call this; others will error.
      */
     public synchronized void propose(String data) throws IOException {
         if (nodeId != getLeader(currentView)) {
             throw new IllegalStateException("Only the leader can propose");
         }
-        
+
         Block block = new Block(data);
         pendingBlock = block;
-        
-        // Prepare phase: send prepare message with highQC
+
         Prepare msg = new Prepare(currentView, nodeId, block, highQC);
         broadcastConsensusMessage(msg);
-        
+
         System.out.println("[" + nodeId + "] Proposed (prepare phase): " + msg);
     }
-    
-    /**
-     * Called by APL when a consensus message arrives (as application payload).
-     * We need to deserialize and dispatch.
-     * 
-     * Also records a heartbeat from the sender (for failure detection).
-     */
+
     @Override
     public void onMessage(int srcId, byte[] payload) {
-        // Record heartbeat from this sender (node is alive)
         if (failureDetector != null) {
             failureDetector.heartbeat(srcId);
         }
-        
+
         try {
             HotStuffMessage msg = deserializeMessage(payload);
             handleMessage(msg);
@@ -234,36 +240,42 @@ public class HotStuffNode implements APLListener {
             e.printStackTrace();
         }
     }
-    
+
     protected synchronized void handleMessage(HotStuffMessage msg) {
         if (msg instanceof NewView) {
             handleNewView((NewView) msg);
-        } else if (msg instanceof PrepareVote) {
-            handlePrepareVote((PrepareVote) msg);
-        } else if (msg instanceof PreCommitVote) {
-            handlePreCommitVote((PreCommitVote) msg);
-        } else if (msg instanceof CommitVote) {
-            handleCommitVote((CommitVote) msg);
+        } else if (msg instanceof Prepare) {
+            handlePrepare((Prepare) msg);
+        } else if (msg instanceof PreCommit) {
+            handlePreCommit((PreCommit) msg);
+        } else if (msg instanceof Commit) {
+            handleCommit((Commit) msg);
+        } else if (msg instanceof SignedVote) {
+            handleSignedVote((SignedVote) msg);
         } else if (msg instanceof Decide) {
             handleDecide((Decide) msg);
         }
     }
-    
+
     protected void handleNewView(NewView msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
-        
-        // Only leader processes new-view messages
+
+        if (msg.getView() < currentView) {
+            return;
+        }
+
+        if (msg.getView() > currentView) {
+            advanceToView(msg.getView());
+        }
+
         if (nodeId != getLeader(currentView)) {
             return;
         }
-        
-        // Collect new-view messages for this view
+
         Map<Integer, NewView> views = newViewMessages.computeIfAbsent(msg.getView(), k -> new ConcurrentHashMap<>());
         boolean isNewSender = views.put(msg.getSenderId(), msg) == null;
-        
-        // Once we have a quorum of new-view messages, proceed with prepare phase
-        if (isNewSender && views.size() == quorumSize) {
-            // Select highQC: the highest view QC from the new-view messages
+
+        if (isNewSender && views.size() >= byzantineQuorumSize) {
             QuorumCertificate selectedQC = highQC;
             for (NewView nv : views.values()) {
                 if (nv.getPrepareQC() != null) {
@@ -273,125 +285,429 @@ public class HotStuffNode implements APLListener {
                 }
             }
             highQC = selectedQC;
-            
-            System.out.println("[" + nodeId + "] Collected quorum of new-view messages. " +
-                              "Selected highQC: " + (highQC != null ? highQC.toString() : "null"));
-            // Ready to propose a new block
+
+            System.out.println("[" + nodeId + "] Collected quorum of new-view messages. Selected highQC: " +
+                    (highQC != null ? highQC : "null"));
             onNewViewQuorum(msg.getView());
         }
     }
 
     /**
-     * Hook for subclasses that need to react when the leader reaches new-view quorum.
+     * Hook for integration layers that need to react when the leader reaches new-view quorum.
      */
     protected void onNewViewQuorum(long view) {
-        // no-op by default
-    }
-    
-    protected void handlePrepareVote(PrepareVote msg) {
-        System.out.println("[" + nodeId + "] Received: " + msg);
-        
-        // Only leader processes votes
-        if (nodeId != getLeader(currentView)) {
+        if (proposalReadyListener == null) {
             return;
         }
-        
-        // Track prepare votes for this view
-        Map<Integer, byte[]> votes = prepareVotes.computeIfAbsent(msg.getView(), k -> new ConcurrentHashMap<>());
-        votes.put(msg.getSenderId(), msg.getBlockHash());
-        
-        // Check if we have a quorum for this block
-        if (votes.size() >= quorumSize && pendingBlock != null) {
-            // Form prepareQC and advance to pre-commit phase
-            QuorumCertificate prepareQC = new QuorumCertificate(msg.getView(), pendingBlock.getHash(), quorumSize);
-            for (int i = 0; i < quorumSize && i < votes.size(); i++) {
-                prepareQC.addVote(i);
-            }
-            
-            try {
-                PreCommit precommit = new PreCommit(msg.getView(), nodeId, prepareQC);
-                broadcastConsensusMessage(precommit);
-                System.out.println("[" + nodeId + "] Queued pre-commit broadcast: " + precommit);
-            } catch (Exception e) {
-                System.err.println("[" + nodeId + "] Failed to queue pre-commit: " + e.getMessage());
-            }
-        }
-    }
-    
-    protected void handlePreCommitVote(PreCommitVote msg) {
-        System.out.println("[" + nodeId + "] Received: " + msg);
-        
-        if (nodeId != getLeader(currentView)) {
+        if (!isCurrentLeader() || view != currentView) {
             return;
         }
-        
-        Map<Integer, byte[]> votes = precommitVotes.computeIfAbsent(msg.getView(), k -> new ConcurrentHashMap<>());
-        votes.put(msg.getSenderId(), msg.getBlockHash());
-        
-        if (votes.size() >= quorumSize && pendingBlock != null) {
-            QuorumCertificate precommitQC = new QuorumCertificate(msg.getView(), pendingBlock.getHash(), quorumSize);
-            for (int i = 0; i < quorumSize && i < votes.size(); i++) {
-                precommitQC.addVote(i);
-            }
-            
-            try {
-                Commit commit = new Commit(msg.getView(), nodeId, precommitQC);
-                broadcastConsensusMessage(commit);
-                System.out.println("[" + nodeId + "] Queued commit broadcast: " + commit);
-            } catch (Exception e) {
-                System.err.println("[" + nodeId + "] Failed to queue commit: " + e.getMessage());
-            }
+        proposalReadyListener.onReadyToPropose();
+    }
+
+    /**
+     * Byzantine variant of prepare handling: validates QC and safe-node predicate.
+     */
+    protected void handlePrepare(Prepare msg) {
+        System.out.println("[" + nodeId + "] Received: " + msg);
+
+        if (msg.getView() < currentView) {
+            System.out.println("[" + nodeId + "] Ignoring prepare for old view " + msg.getView());
+            return;
+        }
+
+        if (msg.getView() > currentView) {
+            advanceToView(msg.getView());
+        }
+
+        QuorumCertificate justify = msg.getJustify();
+        if (justify != null && !validateQC(justify)) {
+            System.err.println("[" + nodeId + "] Rejected prepare: invalid QC signatures");
+            return;
+        }
+
+        Block block = msg.getNode();
+        boolean safe;
+        if (lockedQC == null) {
+            safe = true;
+        } else if (justify != null && justify.getView() > lockedQC.getView()) {
+            safe = true;
+        } else {
+            safe = justify != null && Arrays.equals(justify.getBlockHash(), lockedQC.getBlockHash());
+        }
+
+        if (!safe) {
+            System.out.println("[" + nodeId + "] Rejected prepare (safeNode predicate failed)");
+            return;
+        }
+
+        pendingBlock = block;
+
+        try {
+            SignedVote vote = createSignedVote(currentView, block.getHash(), "prepare");
+            asyncSend(msg.getSenderId(), serializeMessage(vote));
+            System.out.println("[" + nodeId + "] Queued prepare vote: " + vote);
+        } catch (Exception e) {
+            System.err.println("[" + nodeId + "] Failed to create signed vote: " + e.getMessage());
         }
     }
 
-    
-    protected void handleCommitVote(CommitVote msg) {
+    /**
+     * Byzantine variant of pre-commit handling: validates prepare QC and signs a pre-commit vote.
+     */
+    protected void handlePreCommit(PreCommit msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
-        
-        if (nodeId != getLeader(currentView)) {
-            return;
-        }
-        
-        Map<Integer, byte[]> votes = commitVotes.computeIfAbsent(msg.getView(), k -> new ConcurrentHashMap<>());
-        votes.put(msg.getSenderId(), msg.getBlockHash());
-        
-        if (votes.size() >= quorumSize && pendingBlock != null) {
-            QuorumCertificate commitQC = new QuorumCertificate(msg.getView(), pendingBlock.getHash(), quorumSize);
-            for (int i = 0; i < quorumSize && i < votes.size(); i++) {
-                commitQC.addVote(i);
-            }
-            
-            // Set highQC for next leader
-            highQC = commitQC;
-            
-            try {
-                Decide decide = new Decide(msg.getView(), nodeId, commitQC);
-                broadcastConsensusMessage(decide);
-                System.out.println("[" + nodeId + "] Queued decide broadcast: " + decide);
-                
-                // Leader also commits locally (rather than waiting for Decide to be received back)
-                commitBlock(msg.getView());
-            } catch (Exception e) {
-                System.err.println("[" + nodeId + "] Failed to queue decide: " + e.getMessage());
-            }
-        }
-    }
-    
-    protected void handleDecide(Decide msg) {
-        System.out.println("[" + nodeId + "] Received: " + msg);
-        
+
         if (msg.getView() < currentView) {
             return;
         }
-        
+
+        if (msg.getView() > currentView) {
+            advanceToView(msg.getView());
+        }
+
+        QuorumCertificate qc = msg.getPrepareQC();
+        if (qc != null && !validateQC(qc)) {
+            System.err.println("[" + nodeId + "] Rejected pre-commit: invalid prepare QC");
+            return;
+        }
+
+        try {
+            SignedVote vote = createSignedVote(currentView, msg.getPrepareQC().getBlockHash(), "precommit");
+            asyncSend(msg.getSenderId(), serializeMessage(vote));
+            System.out.println("[" + nodeId + "] Queued pre-commit vote: " + vote);
+        } catch (Exception e) {
+            System.err.println("[" + nodeId + "] Failed to create precommit vote: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Byzantine variant of commit handling: validates pre-commit QC, locks, and signs commit vote.
+     */
+    protected void handleCommit(Commit msg) {
+        System.out.println("[" + nodeId + "] Received: " + msg);
+
+        if (msg.getView() < currentView) {
+            return;
+        }
+
+        if (msg.getView() > currentView) {
+            advanceToView(msg.getView());
+        }
+
+        QuorumCertificate qc = msg.getPrecommitQC();
+        if (qc != null && !validateQC(qc)) {
+            System.err.println("[" + nodeId + "] Rejected commit: invalid precommit QC");
+            return;
+        }
+
+        lockedQC = msg.getPrecommitQC();
+
+        try {
+            SignedVote vote = createSignedVote(currentView, msg.getPrecommitQC().getBlockHash(), "commit");
+            asyncSend(msg.getSenderId(), serializeMessage(vote));
+            System.out.println("[" + nodeId + "] Queued commit vote: " + vote +
+                    " (now locked on view " + msg.getPrecommitQC().getView() + ")");
+        } catch (Exception e) {
+            System.err.println("[" + nodeId + "] Failed to create commit vote: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Create a signed vote for one phase.
+     */
+    private SignedVote createSignedVote(long view, byte[] blockHash, String phase) throws Exception {
+        byte[] message = serializeForSignature(view, blockHash, phase);
+        byte[] signature = sign(message);
+        return new SignedVote(view, nodeId, blockHash, phase, signature);
+    }
+
+    /**
+     * Serialize view, block hash, and phase for signing.
+     */
+    private byte[] serializeForSignature(long view, byte[] blockHash, String phase) throws Exception {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(bos);
+
+        dos.writeLong(view);
+        dos.write(blockHash);
+        dos.write(phase.getBytes());
+
+        dos.flush();
+        return bos.toByteArray();
+    }
+
+    private byte[] sign(byte[] message) throws Exception {
+        Signature sig = Signature.getInstance("SHA256withRSA");
+        sig.initSign(privateKey);
+        sig.update(message);
+        return sig.sign();
+    }
+
+    /**
+     * Verify a signed vote.
+     */
+    private boolean verifySignature(SignedVote vote) {
+        try {
+            PublicKey pubKey = publicKeys.get(vote.getSenderId());
+            if (pubKey == null) {
+                System.err.println("[" + nodeId + "] No public key for sender " + vote.getSenderId());
+                return false;
+            }
+
+            byte[] message = serializeForSignature(vote.getView(), vote.getBlockHash(), vote.getPhase());
+            Signature sig = Signature.getInstance("SHA256withRSA");
+            sig.initVerify(pubKey);
+            sig.update(message);
+            return sig.verify(vote.getSignature());
+        } catch (Exception e) {
+            System.err.println("[" + nodeId + "] Signature verification failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Validate a Byzantine QC by verifying all included signatures.
+     */
+    private boolean validateQC(QuorumCertificate byzQC) {
+        if (byzQC == null || byzQC.getSignedVotes().isEmpty()) {
+            System.err.println("[" + nodeId + "] Invalid QC: no signed votes");
+            return false;
+        }
+
+        int validVotes = 0;
+        Set<Integer> signers = new HashSet<>();
+
+        for (SignedVote vote : byzQC.getSignedVotes().values()) {
+            if (!verifySignature(vote)) {
+                System.err.println("[" + nodeId + "] QC validation failed: signature from node " +
+                        vote.getSenderId() + " is invalid");
+                continue;
+            }
+
+            if (!byzQC.getPhase().equals(vote.getPhase())) {
+                System.err.println("[" + nodeId + "] QC validation failed: phase mismatch " +
+                        byzQC.getPhase() + " vs " + vote.getPhase());
+                continue;
+            }
+
+            if (!Arrays.equals(byzQC.getBlockHash(), vote.getBlockHash())) {
+                System.err.println("[" + nodeId + "] QC validation failed: block hash mismatch");
+                continue;
+            }
+
+            if (byzQC.getView() != vote.getView()) {
+                System.err.println("[" + nodeId + "] QC validation failed: view mismatch");
+                continue;
+            }
+
+            validVotes++;
+            signers.add(vote.getSenderId());
+        }
+
+        if (signers.size() != byzQC.getSignedVotes().size()) {
+            System.err.println("[" + nodeId + "] QC validation failed: duplicate signers detected");
+            return false;
+        }
+
+        if (validVotes < byzantineQuorumSize) {
+            System.err.println("[" + nodeId + "] QC validation failed: only " + validVotes +
+                    " valid votes (need " + byzantineQuorumSize + ")");
+            return false;
+        }
+
+        System.out.println("[" + nodeId + "] QC validated: " + validVotes + "/" + byzQC.getSignedVotes().size() +
+                " votes valid");
+        return true;
+    }
+
+    /**
+     * Handle and validate a SignedVote message.
+     */
+    private void handleSignedVote(SignedVote vote) {
+        if (!verifySignature(vote)) {
+            System.err.println("[" + nodeId + "] Rejected vote with invalid signature from " +
+                    vote.getSenderId());
+            return;
+        }
+
+        Map<Integer, byte[]> votedInView = blockVotedInView.computeIfAbsent(vote.getView(),
+                k -> new ConcurrentHashMap<>());
+        byte[] previousVote = votedInView.get(vote.getSenderId());
+        if (previousVote != null && !Arrays.equals(previousVote, vote.getBlockHash())) {
+            System.err.println("[" + nodeId + "] EQUIVOCATION DETECTED: node " + vote.getSenderId() +
+                    " voted for different blocks in view " + vote.getView());
+            return;
+        }
+        votedInView.put(vote.getSenderId(), vote.getBlockHash());
+
+        if ("prepare".equals(vote.getPhase())) {
+            handlePrepareVote(vote);
+        } else if ("precommit".equals(vote.getPhase())) {
+            handlePreCommitVote(vote);
+        } else if ("commit".equals(vote.getPhase())) {
+            handleCommitVote(vote);
+        } else {
+            System.err.println("[" + nodeId + "] Unknown phase: " + vote.getPhase());
+        }
+    }
+
+    /**
+     * Leader-side prepare vote aggregation.
+     */
+    private void handlePrepareVote(SignedVote vote) {
+        if (nodeId != getLeader(currentView)) {
+            return;
+        }
+
+        if (vote.getView() != currentView) {
+            return;
+        }
+
+        if (pendingBlock == null) {
+            return;
+        }
+        if (!Arrays.equals(vote.getBlockHash(), pendingBlock.getHash())) {
+            System.out.println("[" + nodeId + "] Ignoring prepare vote for non-pending block from " +
+                    vote.getSenderId());
+            return;
+        }
+
+        Map<Integer, SignedVote> votes =
+                prepareSignedVotes.computeIfAbsent(vote.getView(), k -> new ConcurrentHashMap<>());
+        boolean isNewSender = votes.putIfAbsent(vote.getSenderId(), vote) == null;
+        if (!isNewSender || votes.size() < byzantineQuorumSize) {
+            return;
+        }
+        if (!precommitBroadcastedViews.add(vote.getView())) {
+            return;
+        }
+
+        QuorumCertificate prepareQC =
+                new QuorumCertificate(vote.getView(), "prepare", pendingBlock.getHash(), byzantineQuorumSize, votes);
+        if (prepareQC.getVoteCount() < byzantineQuorumSize) {
+            return;
+        }
+
+        PreCommit precommit = new PreCommit(vote.getView(), nodeId, prepareQC);
+        broadcastConsensusMessage(precommit);
+        System.out.println("[" + nodeId + "] Queued pre-commit broadcast: " + precommit);
+    }
+
+    /**
+     * Leader-side pre-commit vote aggregation.
+     */
+    private void handlePreCommitVote(SignedVote vote) {
+        if (nodeId != getLeader(currentView)) {
+            return;
+        }
+
+        if (vote.getView() != currentView) {
+            return;
+        }
+
+        if (pendingBlock == null) {
+            return;
+        }
+        if (!Arrays.equals(vote.getBlockHash(), pendingBlock.getHash())) {
+            System.out.println("[" + nodeId + "] Ignoring pre-commit vote for non-pending block from " +
+                    vote.getSenderId());
+            return;
+        }
+
+        Map<Integer, SignedVote> votes =
+                precommitSignedVotes.computeIfAbsent(vote.getView(), k -> new ConcurrentHashMap<>());
+        boolean isNewSender = votes.putIfAbsent(vote.getSenderId(), vote) == null;
+        if (!isNewSender || votes.size() < byzantineQuorumSize) {
+            return;
+        }
+        if (!commitBroadcastedViews.add(vote.getView())) {
+            return;
+        }
+
+        QuorumCertificate precommitQC =
+                new QuorumCertificate(vote.getView(), "precommit", pendingBlock.getHash(), byzantineQuorumSize, votes);
+        if (precommitQC.getVoteCount() < byzantineQuorumSize) {
+            return;
+        }
+
+        Commit commit = new Commit(vote.getView(), nodeId, precommitQC);
+        broadcastConsensusMessage(commit);
+        System.out.println("[" + nodeId + "] Queued commit broadcast: " + commit);
+    }
+
+    /**
+     * Leader-side commit vote aggregation.
+     */
+    private void handleCommitVote(SignedVote vote) {
+        if (nodeId != getLeader(currentView)) {
+            return;
+        }
+
+        if (vote.getView() != currentView) {
+            return;
+        }
+
+        if (pendingBlock == null) {
+            return;
+        }
+        if (!Arrays.equals(vote.getBlockHash(), pendingBlock.getHash())) {
+            System.out.println("[" + nodeId + "] Ignoring commit vote for non-pending block from " +
+                    vote.getSenderId());
+            return;
+        }
+
+        Map<Integer, SignedVote> votes =
+                commitSignedVotes.computeIfAbsent(vote.getView(), k -> new ConcurrentHashMap<>());
+        boolean isNewSender = votes.putIfAbsent(vote.getSenderId(), vote) == null;
+        if (!isNewSender || votes.size() < byzantineQuorumSize) {
+            return;
+        }
+        if (!decideBroadcastedViews.add(vote.getView())) {
+            return;
+        }
+
+        QuorumCertificate commitQC =
+                new QuorumCertificate(vote.getView(), "commit", pendingBlock.getHash(), byzantineQuorumSize, votes);
+        if (commitQC.getVoteCount() < byzantineQuorumSize) {
+            return;
+        }
+
+        highQC = commitQC;
+
+        Decide decide = new Decide(vote.getView(), nodeId, commitQC);
+        broadcastConsensusMessage(decide);
+        System.out.println("[" + nodeId + "] Queued decide broadcast: " + decide);
+        commitBlock(vote.getView());
+    }
+
+    /**
+     * Handle decide and commit locally.
+     */
+    protected void handleDecide(Decide msg) {
+        System.out.println("[" + nodeId + "] Received: " + msg);
+
+        if (msg.getView() < currentView) {
+            return;
+        }
+
+        QuorumCertificate qc = msg.getCommitQC();
+        if (qc != null && !validateQC(qc)) {
+            System.err.println("[" + nodeId + "] Rejected decide: invalid commit QC");
+            return;
+        }
+
+        if (qc != null) {
+            highQC = qc;
+        }
+
         commitBlock(msg.getView());
     }
 
     /**
-     * Helper to commit the pending block, advance to next view, and send new-view.
+     * Commit the pending block, advance view, and send new-view.
      */
     protected void commitBlock(long view) {
-        // Commit the block
         if (pendingBlock != null) {
             log.add(pendingBlock);
             if (listener != null) {
@@ -399,62 +715,56 @@ public class HotStuffNode implements APLListener {
             }
             System.out.println("[" + nodeId + "] Committed block: " + pendingBlock);
         }
-        
-        // Advance to next view
-        currentView++;
+
+        currentView = Math.max(currentView, view) + 1;
         pendingBlock = null;
-        prepareVotes.clear();
-        precommitVotes.clear();
-        commitVotes.clear();
-        newViewMessages.clear();
-        
-        System.out.println("[" + nodeId + "] Advanced to view " + currentView + 
-                          ". New leader: " + getLeader(currentView));
-        
-        // Send new-view for next view
+        clearViewState();
+
+        System.out.println("[" + nodeId + "] Advanced to view " + currentView +
+                ". New leader: " + getLeader(currentView));
+
         try {
             sendNewView();
         } catch (IOException e) {
             System.err.println("[" + nodeId + "] Failed to send new-view: " + e.getMessage());
         }
     }
-    
+
+    /**
+     * Move local state to a newer view and clear all per-view state.
+     */
+    private void advanceToView(long view) {
+        currentView = view;
+        pendingBlock = null;
+        clearViewState();
+    }
+
     protected int getLeader(long view) {
         return (int) (view % nodeIds.size());
     }
 
-    /**
-     * Broadcast a consensus message to all other replicas asynchronously.
-     * No exceptions are propagated; failures are logged but the broadcast
-     * proceeds to other nodes.
-     */
     protected void broadcastConsensusMessage(HotStuffMessage msg) {
         byte[] payload = serializeMessage(msg);
         for (int id : nodeIds) {
-            if (id == nodeId) continue;
+            if (id == nodeId) {
+                continue;
+            }
             asyncSend(id, payload);
         }
     }
 
-    /**
-     * Send a message to a destination in a separate thread so that the caller
-     * (e.g., the receive loop handler) is never blocked waiting for an ACK.
-     * This prevents deadlocks when message handlers need to send responses.
-     */
     protected void asyncSend(int dest, byte[] payload) {
         new Thread(() -> {
             try {
                 apl.send(dest, payload);
             } catch (IOException e) {
-                System.err.println("[" + nodeId + "] async send to " + dest + 
-                                   " failed: " + e.getMessage());
+                System.err.println("[" + nodeId + "] async send to " + dest +
+                        " failed: " + e.getMessage());
             }
-        }, "HS-send-" + nodeId + "-to-" + dest + "-" + System.nanoTime()).start();
+        }, "BHS-send-" + nodeId + "-to-" + dest + "-" + System.nanoTime()).start();
     }
 
-    
     protected byte[] serializeMessage(HotStuffMessage msg) {
-        // use Java serialization for simplicity
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
              ObjectOutputStream oos = new ObjectOutputStream(bos)) {
             oos.writeObject(msg);
@@ -464,7 +774,7 @@ public class HotStuffNode implements APLListener {
             throw new RuntimeException("serialization failed", e);
         }
     }
-    
+
     protected HotStuffMessage deserializeMessage(byte[] payload) {
         try (ByteArrayInputStream bis = new ByteArrayInputStream(payload);
              ObjectInputStream ois = new ObjectInputStream(bis)) {
@@ -473,58 +783,51 @@ public class HotStuffNode implements APLListener {
             throw new RuntimeException("deserialization failed", e);
         }
     }
-    
+
     public List<Block> getLog() {
         return new ArrayList<>(log);
     }
-    
+
     public long getCurrentView() {
         return currentView;
     }
-    
+
     public int getNodeId() {
         return nodeId;
     }
-    
-    /**
-     * Protected accessors for subclasses (e.g., ByzantineHotStuffNode)
-     */
-    protected void setCurrentView(long view) {
-        this.currentView = view;
+
+    public boolean isCurrentLeader() {
+        return nodeId == getLeader(currentView);
     }
-    
-    protected void setPendingBlock(Block block) {
-        this.pendingBlock = block;
+
+    protected int getQuorumSize() {
+        return byzantineQuorumSize;
     }
-    
-    protected Block getPendingBlock() {
-        return pendingBlock;
-    }
-    
+
     protected QuorumCertificate getHighQC() {
         return highQC;
     }
-    
+
     protected void setHighQC(QuorumCertificate qc) {
         this.highQC = qc;
     }
-    
+
     protected QuorumCertificate getLockedQC() {
         return lockedQC;
     }
-    
+
     protected void setLockedQC(QuorumCertificate qc) {
         this.lockedQC = qc;
     }
-    
-    protected int getQuorumSize() {
-        return quorumSize;
-    }
-    
+
     protected void clearViewState() {
-        prepareVotes.clear();
-        precommitVotes.clear();
-        commitVotes.clear();
         newViewMessages.clear();
+        prepareSignedVotes.clear();
+        precommitSignedVotes.clear();
+        commitSignedVotes.clear();
+        blockVotedInView.clear();
+        precommitBroadcastedViews.clear();
+        commitBroadcastedViews.clear();
+        decideBroadcastedViews.clear();
     }
 }
