@@ -1,6 +1,6 @@
 package depchain.client;
 
-import depchain.network.AuthenticatedPerfectLinks;
+import depchain.network.AuthenticatedPerfectLinksImpl;
 import java.io.IOException;
 
 /**
@@ -17,10 +17,10 @@ import java.io.IOException;
  */
 public class ServiceClient {
     private final int clientId;
-    private final AuthenticatedPerfectLinks apl;
+    private final AuthenticatedPerfectLinksImpl apl;
     private final int targetReplica;
     
-    public ServiceClient(int clientId, AuthenticatedPerfectLinks apl, int targetReplica) {
+    public ServiceClient(int clientId, AuthenticatedPerfectLinksImpl apl, int targetReplica) {
         this.clientId = clientId;
         this.apl = apl;
         this.targetReplica = targetReplica;

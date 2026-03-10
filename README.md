@@ -79,7 +79,6 @@ src/main/java/depchain/
 ├── network/            # Authenticated Perfect Links (APL)
 │   ├── APLListener.java
 │   ├── APLMessage.java
-│   ├── AuthenticatedPerfectLinks.java
 │   └── AuthenticatedPerfectLinksImpl.java
 ├── service/            # Service layer (append-only log)
 │   ├── AppendOnlyLog.java
@@ -94,4 +93,3 @@ The following will be added in Phase 2:
 - Commitment confirmation protocol (clients wait for committed blocks)
 - Client-side append-only log with persistence
 - Transaction semantics (proper request/reply)
-

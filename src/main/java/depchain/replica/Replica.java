@@ -5,7 +5,7 @@ import depchain.consensus.HotStuffNode;
 import depchain.consensus.ConsensusListener;
 import depchain.consensus.ProposalReadyListener;
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinks;
+import depchain.network.AuthenticatedPerfectLinksImpl;
 import depchain.service.BlockchainService;
 
 import java.io.IOException;
@@ -35,7 +35,7 @@ public class Replica implements APLListener, ConsensusListener, ProposalReadyLis
     private final Queue<String> clientDataBuffer;
     private volatile long readyView;
 
-    public Replica(int replicaId, List<Integer> allReplicaIds, AuthenticatedPerfectLinks apl,
+    public Replica(int replicaId, List<Integer> allReplicaIds, AuthenticatedPerfectLinksImpl apl,
                    PrivateKey privateKey, Map<Integer, PublicKey> publicKeys) {
         this.replicaId = replicaId;
         this.clientDataBuffer = new ConcurrentLinkedQueue<>();

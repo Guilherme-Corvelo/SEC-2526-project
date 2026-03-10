@@ -1,7 +1,12 @@
 package depchain.consensus;
 
+import com.weavechain.curve25519.CompressedEdwardsY;
+import com.weavechain.curve25519.EdwardsPoint;
+import com.weavechain.curve25519.Scalar;
+import com.weavechain.sig.ThresholdSigEd25519;
+import com.weavechain.sig.ThresholdSigEd25519Params;
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinks;
+import depchain.network.AuthenticatedPerfectLinksImpl;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -9,12 +14,14 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.security.Signature;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,18 +31,24 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * ByzantineHotStuffNode: A replica in the Byzantine Fault Tolerant HotStuff consensus protocol.
+ * HotStuffNode: A replica in the Byzantine Fault Tolerant HotStuff consensus protocol.
  *
  * Implements HotStuff with cryptographic signatures and Byzantine quorum certificates.
  */
 public class HotStuffNode implements APLListener {
+    private static final Map<String, ThresholdSigEd25519Params> THRESHOLD_CONTEXTS =
+            new ConcurrentHashMap<>();
+
     private final int nodeId;
     private final List<Integer> nodeIds;
-    private final AuthenticatedPerfectLinks apl;
+    private final AuthenticatedPerfectLinksImpl apl;
     private final ConsensusListener listener;
-    private final PrivateKey privateKey;
-    private final Map<Integer, PublicKey> publicKeys;
     private final ProposalReadyListener proposalReadyListener;
+    private final Map<Integer, Integer> nodeIndexById;
+    private final ThresholdSigEd25519 thresholdSig;
+    private final ThresholdSigEd25519Params thresholdParams;
+    private final Scalar localPrivateShare;
+    private final byte[] committeePublicKey;
 
     private ViewChangeListener viewChangeListener;
 
@@ -72,26 +85,46 @@ public class HotStuffNode implements APLListener {
     private FailureDetector failureDetector;
     private Thread leaderMonitorThread;
 
-    public HotStuffNode(int nodeId, List<Integer> nodeIds, AuthenticatedPerfectLinks apl,
+    public HotStuffNode(int nodeId, List<Integer> nodeIds, AuthenticatedPerfectLinksImpl apl,
                                  ConsensusListener listener, PrivateKey privateKey,
                                  Map<Integer, PublicKey> publicKeys) {
         this(nodeId, nodeIds, apl, listener, privateKey, publicKeys, null);
     }
 
-    public HotStuffNode(int nodeId, List<Integer> nodeIds, AuthenticatedPerfectLinks apl,
+    public HotStuffNode(int nodeId, List<Integer> nodeIds, AuthenticatedPerfectLinksImpl apl,
                                  ConsensusListener listener, PrivateKey privateKey,
                                  Map<Integer, PublicKey> publicKeys, ProposalReadyListener proposalListener) {
         this.nodeId = nodeId;
         this.nodeIds = new ArrayList<>(nodeIds);
+        Collections.sort(this.nodeIds);
         this.apl = apl;
         this.listener = listener;
-        this.privateKey = privateKey;
-        this.publicKeys = new HashMap<>(publicKeys);
         this.proposalReadyListener = proposalListener;
 
-        int n = nodeIds.size();
+        int n = this.nodeIds.size();
         this.maxFaults = (n - 1) / 3;
         this.byzantineQuorumSize = 2 * maxFaults + 1;
+        this.nodeIndexById = new HashMap<>();
+        for (int i = 0; i < this.nodeIds.size(); i++) {
+            this.nodeIndexById.put(this.nodeIds.get(i), i);
+        }
+
+        this.thresholdSig = new ThresholdSigEd25519(byzantineQuorumSize, n);
+        String contextKey = thresholdContextKey(this.nodeIds, byzantineQuorumSize);
+        this.thresholdParams = THRESHOLD_CONTEXTS.computeIfAbsent(contextKey, k -> {
+            try {
+                return thresholdSig.generate();
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to initialize threshold signature context", e);
+            }
+        });
+
+        Integer localIndex = this.nodeIndexById.get(nodeId);
+        if (localIndex == null) {
+            throw new IllegalArgumentException("Node id " + nodeId + " not in membership list");
+        }
+        this.localPrivateShare = this.thresholdParams.getPrivateShares().get(localIndex);
+        this.committeePublicKey = this.thresholdParams.getPublicKey();
 
         this.failureDetector = new TimeoutFailureDetector(nodeIds, 2000);
 
@@ -438,28 +471,36 @@ public class HotStuffNode implements APLListener {
     }
 
     private byte[] sign(byte[] message) throws Exception {
-        Signature sig = Signature.getInstance("SHA256withRSA");
-        sig.initSign(privateKey);
-        sig.update(message);
-        return sig.sign();
+        Scalar hash = hashToScalar(message);
+        Scalar partialSignature = localPrivateShare.multiply(hash);
+        return partialSignature.toByteArray();
     }
 
     /**
-     * Verify a signed vote.
+     * Verify a partial signature vote share.
      */
     private boolean verifySignature(SignedVote vote) {
         try {
-            PublicKey pubKey = publicKeys.get(vote.getSenderId());
-            if (pubKey == null) {
-                System.err.println("[" + nodeId + "] No public key for sender " + vote.getSenderId());
+            Integer signerIndex = nodeIndexById.get(vote.getSenderId());
+            if (signerIndex == null) {
+                System.err.println("[" + nodeId + "] Sender " + vote.getSenderId() + " is not part of membership");
                 return false;
             }
 
             byte[] message = serializeForSignature(vote.getView(), vote.getBlockHash(), vote.getPhase());
-            Signature sig = Signature.getInstance("SHA256withRSA");
-            sig.initVerify(pubKey);
-            sig.update(message);
-            return sig.verify(vote.getSignature());
+            Scalar hash = hashToScalar(message);
+            Scalar partialSignature = scalarFromBytes(vote.getSignature());
+            if (partialSignature == null) {
+                return false;
+            }
+
+            Scalar signerShare = thresholdParams.getPrivateShares().get(signerIndex);
+            EdwardsPoint signerPublicShare = ThresholdSigEd25519.mulBasepoint(signerShare);
+
+            EdwardsPoint lhs = ThresholdSigEd25519.mulBasepoint(partialSignature);
+            EdwardsPoint rhs = signerPublicShare.multiply(hash);
+
+            return Arrays.equals(lhs.compress().toByteArray(), rhs.compress().toByteArray());
         } catch (Exception e) {
             System.err.println("[" + nodeId + "] Signature verification failed: " + e.getMessage());
             return false;
@@ -516,9 +557,90 @@ public class HotStuffNode implements APLListener {
             return false;
         }
 
+        if (!byzQC.hasAggregatedSignature()) {
+            System.err.println("[" + nodeId + "] QC validation failed: missing aggregated signature");
+            return false;
+        }
+        if (!verifyAggregatedQCSignature(byzQC)) {
+            System.err.println("[" + nodeId + "] QC validation failed: invalid aggregated signature");
+            return false;
+        }
+
         System.out.println("[" + nodeId + "] QC validated: " + validVotes + "/" + byzQC.getSignedVotes().size() +
                 " votes valid");
         return true;
+    }
+
+    private boolean aggregateQCSignature(QuorumCertificate qc) {
+        try {
+            Set<Integer> signerIndexes = new HashSet<>();
+            Map<Integer, Scalar> partialByIndex = new HashMap<>();
+
+            for (SignedVote vote : qc.getSignedVotes().values()) {
+                Integer index = nodeIndexById.get(vote.getSenderId());
+                Scalar partial = scalarFromBytes(vote.getSignature());
+                if (index == null || partial == null) {
+                    return false;
+                }
+                signerIndexes.add(index);
+                partialByIndex.put(index, partial);
+            }
+
+            if (signerIndexes.size() < byzantineQuorumSize) {
+                return false;
+            }
+
+            List<Scalar> lagrange = ThresholdSigEd25519.getLagrangeCoef(nodeIds.size(), signerIndexes);
+            Scalar aggregated = Scalar.ZERO;
+            for (Integer index : signerIndexes) {
+                Scalar coef = lagrange.get(index);
+                Scalar partial = partialByIndex.get(index);
+                aggregated = aggregated.add(partial.multiply(coef));
+            }
+
+            qc.setAggregatedSignature(aggregated.toByteArray());
+            return true;
+        } catch (Exception e) {
+            System.err.println("[" + nodeId + "] Failed to aggregate QC signature: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean verifyAggregatedQCSignature(QuorumCertificate qc) {
+        try {
+            Scalar aggregated = scalarFromBytes(qc.getAggregatedSignature());
+            if (aggregated == null) {
+                return false;
+            }
+
+            byte[] message = serializeForSignature(qc.getView(), qc.getBlockHash(), qc.getPhase());
+            Scalar hash = hashToScalar(message);
+
+            EdwardsPoint lhs = ThresholdSigEd25519.mulBasepoint(aggregated);
+            EdwardsPoint committeeKey = new CompressedEdwardsY(committeePublicKey).decompress();
+            EdwardsPoint rhs = committeeKey.multiply(hash);
+
+            return Arrays.equals(lhs.compress().toByteArray(), rhs.compress().toByteArray());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private Scalar hashToScalar(byte[] message) throws NoSuchAlgorithmException {
+        MessageDigest md = MessageDigest.getInstance("SHA-512");
+        md.update(message);
+        return Scalar.fromBytesModOrderWide(md.digest());
+    }
+
+    private Scalar scalarFromBytes(byte[] data) {
+        if (data == null || data.length != 32) {
+            return null;
+        }
+        try {
+            return Scalar.fromBits(data);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
@@ -588,6 +710,10 @@ public class HotStuffNode implements APLListener {
         if (prepareQC.getVoteCount() < byzantineQuorumSize) {
             return;
         }
+        if (!aggregateQCSignature(prepareQC)) {
+            System.err.println("[" + nodeId + "] Failed to aggregate prepare QC signature");
+            return;
+        }
 
         PreCommit precommit = new PreCommit(vote.getView(), nodeId, prepareQC);
         broadcastConsensusMessage(precommit);
@@ -630,6 +756,10 @@ public class HotStuffNode implements APLListener {
         if (precommitQC.getVoteCount() < byzantineQuorumSize) {
             return;
         }
+        if (!aggregateQCSignature(precommitQC)) {
+            System.err.println("[" + nodeId + "] Failed to aggregate precommit QC signature");
+            return;
+        }
 
         Commit commit = new Commit(vote.getView(), nodeId, precommitQC);
         broadcastConsensusMessage(commit);
@@ -670,6 +800,10 @@ public class HotStuffNode implements APLListener {
         QuorumCertificate commitQC =
                 new QuorumCertificate(vote.getView(), "commit", pendingBlock.getHash(), byzantineQuorumSize, votes);
         if (commitQC.getVoteCount() < byzantineQuorumSize) {
+            return;
+        }
+        if (!aggregateQCSignature(commitQC)) {
+            System.err.println("[" + nodeId + "] Failed to aggregate commit QC signature");
             return;
         }
 
@@ -737,6 +871,18 @@ public class HotStuffNode implements APLListener {
         currentView = view;
         pendingBlock = null;
         clearViewState();
+    }
+
+    private static String thresholdContextKey(List<Integer> members, int threshold) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("t=").append(threshold).append(";n=").append(members.size()).append(";members=");
+        for (int i = 0; i < members.size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            sb.append(members.get(i));
+        }
+        return sb.toString();
     }
 
     protected int getLeader(long view) {

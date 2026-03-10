@@ -1,7 +1,6 @@
 package depchain.consensus;
 
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinks;
 import depchain.network.AuthenticatedPerfectLinksImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -352,8 +351,12 @@ class HotStuffNodeTest {
     
     // ============ Mock Classes ============
     
-    static class MockAPL implements AuthenticatedPerfectLinks {
+    static class MockAPL extends AuthenticatedPerfectLinksImpl {
         private APLListener listener;
+
+        MockAPL() {
+            super(0, 0, new HashMap<>(), null, new HashMap<>());
+        }
         
         void setListener(APLListener listener) {
             this.listener = listener;

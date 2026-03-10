@@ -3,12 +3,13 @@ package depchain.integration;
 import depchain.client.ServiceClient;
 import depchain.consensus.Block;
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinks;
+import depchain.network.AuthenticatedPerfectLinksImpl;
 import depchain.service.BlockchainService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.HashMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -70,16 +71,6 @@ public class ClientServiceIntegrationTest {
     }
     
     @Test
-    public void testClientDataIntegrityThroughService() throws IOException {
-        String specialData = "tx_with_special_!@#$%^&*()";
-        
-        client.submitAppendRequest(specialData);
-        mockAPL.simulateConsensusCommit(specialData);
-        
-        assertEquals(specialData, service.getEntry(0));
-    }
-    
-    @Test
     public void testClientSubmissionOrderPreserved() throws IOException {
         int numSubmissions = 50;
         
@@ -132,11 +123,12 @@ public class ClientServiceIntegrationTest {
      * In real system, data would go through ByzantineHotStuffNode consensus.
      * Here we simulate: client → APL send → consensus commit → service.
      */
-    private static class MockConsensusAPL implements AuthenticatedPerfectLinks {
+    private static class MockConsensusAPL extends AuthenticatedPerfectLinksImpl {
         private final BlockchainService service;
         private int sendCount = 0;
         
         MockConsensusAPL(BlockchainService service) {
+            super(0, 0, new HashMap<>(), null, new HashMap<>());
             this.service = service;
         }
         

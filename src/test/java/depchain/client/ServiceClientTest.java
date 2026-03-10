@@ -1,11 +1,12 @@
 package depchain.client;
 
-import depchain.network.AuthenticatedPerfectLinks;
 import depchain.network.APLListener;
+import depchain.network.AuthenticatedPerfectLinksImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.HashMap;
 
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -115,11 +116,15 @@ public class ServiceClientTest {
     /**
      * Mock APL for testing client without real network.
      */
-    private static class MockAPL implements AuthenticatedPerfectLinks {
+    private static class MockAPL extends AuthenticatedPerfectLinksImpl {
         boolean wasSendCalled = false;
         int sendCount = 0;
         int targetReplica = -1;
         byte[] lastPayload = null;
+
+        MockAPL() {
+            super(0, 0, new HashMap<>(), null, new HashMap<>());
+        }
         
         @Override
         public synchronized void send(int replica, byte[] data) throws IOException {

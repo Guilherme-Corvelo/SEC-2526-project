@@ -3,8 +3,8 @@ package depchain.consensus;
 /**
  * SignedVote: A cryptographically signed vote in the Byzantine HotStuff protocol.
  * 
- * Contains the vote data (view, nodeId, blockHash, phase) and a digital signature
- * to ensure authenticity and non-repudiation.
+ * Contains the vote data (view, nodeId, blockHash, phase) and a partial signature
+ * share from the sender.
  */
 public class SignedVote extends Vote {
     private static final long serialVersionUID = 1L;

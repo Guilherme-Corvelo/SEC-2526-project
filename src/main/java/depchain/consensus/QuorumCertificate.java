@@ -22,6 +22,7 @@ public class QuorumCertificate implements Serializable {
     private final int requiredVotes;
     private final String phase;  // "prepare", "precommit", or "commit"
     private final Map<Integer, SignedVote> signedVotes = new HashMap<>();
+    private byte[] aggregatedSignature;
     
     public QuorumCertificate(long view, String phase, byte[] blockHash, int requiredVotes) {
         this.view = view;
@@ -81,10 +82,23 @@ public class QuorumCertificate implements Serializable {
     public Map<Integer, SignedVote> getSignedVotes() {
         return new HashMap<>(signedVotes);
     }
+
+    public void setAggregatedSignature(byte[] aggregatedSignature) {
+        this.aggregatedSignature = aggregatedSignature != null ? aggregatedSignature.clone() : null;
+    }
+
+    public byte[] getAggregatedSignature() {
+        return aggregatedSignature != null ? aggregatedSignature.clone() : null;
+    }
+
+    public boolean hasAggregatedSignature() {
+        return aggregatedSignature != null;
+    }
     
     @Override
     public String toString() {
         return "ByzQC[view=" + view + ", phase=" + phase +
-               ", votes=" + signedVotes.size() + "/" + requiredVotes + "]";
+               ", votes=" + signedVotes.size() + "/" + requiredVotes +
+               ", aggregated=" + (aggregatedSignature != null) + "]";
     }
 }

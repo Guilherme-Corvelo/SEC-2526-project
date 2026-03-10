@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Implementation of Authenticated Perfect Links (APL) using UDP and public-key
  * signatures.
  */
-public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks {
+public class AuthenticatedPerfectLinksImpl {
     private final int localId;
     private final int localPort;
     private final Map<Integer, InetSocketAddress> addresses;
@@ -54,7 +54,12 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
     // move on.  A positive value sets the bound; when the deadline expires a
     // send() will throw IOException.  By default we use 1000ms (one second).
     // Set to 0 or negative if you truly want “retry forever” behaviour.
-    private volatile long maxSendDuration = 1000;
+    
+    // Debug use
+    //private volatile long maxSendDuration = 1000;
+    // Infinite time period to send message
+    private volatile long maxSendDuration = -1;
+
 
     // constants for message control
     private static final byte DATA_FLAG = 0x01;
@@ -78,7 +83,6 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
         this.publicKeys = publicKeys;
     }
 
-    @Override
     public void send(int destId, byte[] payload) throws IOException {
         InetSocketAddress dst = addresses.get(destId);
         if (dst == null) {
@@ -121,6 +125,7 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
                     throw new IOException("send interrupted", ie);
                 }
                 // if we have a maximum send duration, give up after it
+                // debug only
                 if (maxSendDuration > 0 &&
                         System.currentTimeMillis() - startTime > maxSendDuration) {
                     throw new IOException("no ack from dest " + destId + " after " + maxSendDuration + "ms");
@@ -132,12 +137,10 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
         }
     }
 
-    @Override
     public void registerListener(APLListener listener) {
         this.listener = listener;
     }
 
-    @Override
     public void start() throws IOException {
         socket = new DatagramSocket(localPort);
         running.set(true);
@@ -145,7 +148,6 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
         receiverThread.start();
     }
 
-    @Override
     public void stop() {
         running.set(false);
         if (socket != null && !socket.isClosed()) {
@@ -162,7 +164,6 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
         while (running.get()) {
             try {
                 socket.receive(packet);
-                //TODO: refactor not used
                 if (dropNextReceive) {
                     dropNextReceive = false;
                     continue;
@@ -190,7 +191,6 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
                             // processing of the message.
                             sendAck(msg.srcId, msg.seq);
 
-                            //TODO: view listener not even initialized
                             if (listener != null) {
                                 // deliver payload without control byte
                                 byte[] app = new byte[msg.payload.length - 1];
@@ -239,11 +239,8 @@ public class AuthenticatedPerfectLinksImpl implements AuthenticatedPerfectLinks 
     /**
      * Handle an incoming ACK for a sequence number from a given source.
      * If a sender is currently blocked waiting for this ack, wake it up.
-     */
-
-    /*TODO: eventually code something so that when the ack after the period arrives
-    * it will have some kind of logic so that the upper layer can detect it and take the possible
-    * suspect out of the suspect list (for processes that might have crashed)
+     * it will have some kind of logic so that the upper layer can detect it and take the possible
+     * suspect out of the suspect list (for processes that might have crashed)
     */
 
     private void handleAck(int srcId, long ackedSeq) {
