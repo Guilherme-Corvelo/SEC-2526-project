@@ -45,7 +45,7 @@ public class ClientServiceIntegrationTest {
     @Test
     public void testClientSubmissionReachesService() throws IOException {
         // Client submits data
-        client.submitAppendRequest("test_transaction");
+        client.sendRequest("test_transaction");
         
         // Simulate consensus: APL "delivers" it back to service
         mockAPL.simulateConsensusCommit("test_transaction");
@@ -60,7 +60,7 @@ public class ClientServiceIntegrationTest {
         String[] txs = {"tx_1", "tx_2", "tx_3"};
         
         for (String tx : txs) {
-            client.submitAppendRequest(tx);
+            client.sendRequest(tx);
             mockAPL.simulateConsensusCommit(tx);
         }
         
@@ -76,7 +76,7 @@ public class ClientServiceIntegrationTest {
         
         for (int i = 0; i < numSubmissions; i++) {
             String tx = "transaction_" + i;
-            client.submitAppendRequest(tx);
+            client.sendRequest(tx);
             mockAPL.simulateConsensusCommit(tx);
         }
         
@@ -91,13 +91,13 @@ public class ClientServiceIntegrationTest {
         ServiceClient client1 = new ServiceClient(0, mockAPL, 1);
         ServiceClient client2 = new ServiceClient(1, mockAPL, 1);
         
-        client1.submitAppendRequest("client1_tx1");
+        client1.sendRequest("client1_tx1");
         mockAPL.simulateConsensusCommit("client1_tx1");
         
-        client2.submitAppendRequest("client2_tx1");
+        client2.sendRequest("client2_tx1");
         mockAPL.simulateConsensusCommit("client2_tx1");
         
-        client1.submitAppendRequest("client1_tx2");
+        client1.sendRequest("client1_tx2");
         mockAPL.simulateConsensusCommit("client1_tx2");
         
         // All transactions should be in service log
@@ -112,7 +112,7 @@ public class ClientServiceIntegrationTest {
         }
         String largeData = sb.toString();
         
-        client.submitAppendRequest(largeData);
+        client.sendRequest(largeData);
         mockAPL.simulateConsensusCommit(largeData);
         
         assertEquals(largeData, service.getEntry(0));

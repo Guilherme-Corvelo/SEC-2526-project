@@ -1,5 +1,10 @@
 package depchain.consensus;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.security.NoSuchAlgorithmException;
 import java.util.Set;
 
@@ -8,20 +13,20 @@ import com.weavechain.sig.ThresholdSigEd25519;
 
 import depchain.network.AuthenticatedPerfectLinksImpl;
 
-public class Message {
-    private int type;
+public class Message implements Serializable{
+    private PhaseType type;
     private int viewNumber;
     private Node node;
-    private QuorumCertificate qc = null;
+    private QuorumCertificate justify = null;
     private Scalar  partialSign = null; 
 
-    public Message(int type, int viewNumber, Node node){
+    public Message(PhaseType type, int viewNumber, Node node){
         this.type = type;
         this.viewNumber = viewNumber;
         this.node = node;
     }
 
-    private Scalar replicaComputeRi(Scalar privateShare, ThresholdSigEd25519 sigHelper , AuthenticatedPerfectLinksImpl apl){
+    public Scalar replicaComputeRi(Scalar privateShare, ThresholdSigEd25519 sigHelper , AuthenticatedPerfectLinksImpl apl){
         try {
             Scalar Ri = sigHelper.computeRi(privateShare, node.getAction());
             return Ri;
@@ -39,7 +44,94 @@ public class Message {
         //Todo Send this
     }
 
-    public void setQC(QuorumCertificate qc){
-        this.qc = qc;
+    public void setJustify(QuorumCertificate justify){
+        this.justify = justify;
+    }
+
+    public PhaseType getType(){
+        return this.type;
+    }
+
+    public int getView(){
+        return this.viewNumber;
+    }
+
+    public Node getNode(){
+        return this.node;
+    }
+
+    public QuorumCertificate getjustify(){
+        return this.justify;
+    }
+
+    public Scalar getPartialSign() {
+        return this.partialSign;
+    }
+
+    public byte[] serialize(){
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try {
+            ObjectOutputStream oos = new ObjectOutputStream(bos);
+            oos.writeObject(this);
+            return bos.toByteArray();
+        } catch (Exception e) {
+            System.err.println("Failed to serialize msg");
+        }
+        return null;
+    }
+    
+    public static  Message deserialize(byte[] bytes ) {
+        ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
+        try {
+            ObjectInputStream ois = new ObjectInputStream(bis);
+            return (Message) ois.readObject();
+        } catch (Exception e) {
+            System.err.println("Failed to deserialize msg");
+        }
+        return null;
+    }
+
+    @Override
+    public boolean equals(Object obj){
+        if (!(obj instanceof Message)) {
+            return false;
+        }
+        
+        Message other = (Message) obj;
+
+        if (!(this.type == other.type) ||
+            !(this.viewNumber == other.viewNumber ) ||
+            !this.node.equals(node)){
+            return false;
+        }
+
+        if (this.justify == null) {
+            if (other.justify != null) {
+                return false;
+            }
+        } else {
+            if (!this.justify.equals(other.justify)) {
+                return false;
+            }
+        }
+
+        if (this.partialSign == null) {
+            if (other.partialSign != null) {
+                return false;
+            }
+        } else {
+            if (!this.partialSign.equals(other.partialSign)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    @Override
+    public String toString() {
+        return "Message[viewNumber=" + viewNumber + ", type=" + type +
+               ", node=" + node.toString() + ", justify=" + (justify != null ? justify.toString() : "null") +
+               ", partialSign=" + (partialSign != null ? partialSign.toString() : "null") + "]";
     }
 }

@@ -123,7 +123,7 @@ public class ReplicaTest {
     @Test
     public void testReplicaReceivesClientData() throws IOException, InterruptedException {
         // Client sends data to replica 0
-        clients.get(0).submitAppendRequest("test_entry");
+        clients.get(0).sendRequest("test_entry");
 
         // Give time for APL to deliver
         Thread.sleep(200);
@@ -135,9 +135,9 @@ public class ReplicaTest {
     @Test
     public void testReplicaBuffersMultipleClientSubmissions() throws IOException, InterruptedException {
         // Multiple clients submit data
-        clients.get(0).submitAppendRequest("entry_1");
-        clients.get(1).submitAppendRequest("entry_2");
-        clients.get(2).submitAppendRequest("entry_3");
+        clients.get(0).sendRequest("entry_1");
+        clients.get(1).sendRequest("entry_2");
+        clients.get(2).sendRequest("entry_3");
 
         // Give time for APL to deliver
         Thread.sleep(300);
@@ -149,7 +149,7 @@ public class ReplicaTest {
     @Test
     public void testLeaderProposesBufferedData() throws IOException, InterruptedException {
         // Client submits data
-        clients.get(0).submitAppendRequest("blockchain_entry");
+        clients.get(0).sendRequest("blockchain_entry");
 
         // Give time for APL to deliver and for leader to potentially propose
         Thread.sleep(1000);
@@ -168,7 +168,7 @@ public class ReplicaTest {
     @Test
     public void testClientDataFlowsToBlockchainService() throws IOException, InterruptedException {
         String testData = "transaction_data";
-        clients.get(0).submitAppendRequest(testData);
+        clients.get(0).sendRequest(testData);
 
         // Give generous time for:
         // 1. APL delivery
@@ -198,13 +198,9 @@ public class ReplicaTest {
         for (int i = 0; i < 3; i++) {
             final int clientId = i;
             clientThreads[i] = new Thread(() -> {
-                try {
                     for (int j = 0; j < 2; j++) {
-                        clients.get(clientId).submitAppendRequest("client_" + clientId + "_entry_" + j);
+                        clients.get(clientId).sendRequest("client_" + clientId + "_entry_" + j);
                     }
-                } catch (IOException e) {
-                    fail("Client submission failed: " + e.getMessage());
-                }
             });
         }
 
@@ -252,7 +248,7 @@ public class ReplicaTest {
         // With 4 replicas (f=1), need 3 votes for quorum. If 2 crash, only 2 remain, no quorum.
 
         // Submit client data to trigger proposal
-        clients.get(0).submitAppendRequest("quorum_test_data");
+        clients.get(0).sendRequest("quorum_test_data");
 
         // Wait for proposal to potentially start
         Thread.sleep(500);

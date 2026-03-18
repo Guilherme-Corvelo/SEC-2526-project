@@ -34,7 +34,7 @@ public class ServiceClientTest {
     @Test
     public void testSubmitSingleString() throws IOException {
         String data = "test_entry_1";
-        client.submitAppendRequest(data);
+        client.sendRequest(data);
         
         // Verify APL was called
         assertTrue(mockAPL.wasSendCalled);
@@ -51,7 +51,7 @@ public class ServiceClientTest {
         String[] entries = {"entry1", "entry2", "entry3"};
         
         for (String entry : entries) {
-            client.submitAppendRequest(entry);
+            client.sendRequest(entry);
         }
         
         // Verify last submission
@@ -62,7 +62,7 @@ public class ServiceClientTest {
     
     @Test
     public void testSubmitEmptyString() throws IOException {
-        client.submitAppendRequest("");
+        client.sendRequest("");
         
         assertNotNull(mockAPL.lastPayload);
         assertEquals(0, mockAPL.lastPayload.length);
@@ -71,7 +71,7 @@ public class ServiceClientTest {
     @Test
     public void testSubmitStringWithSpecialChars() throws IOException {
         String data = "test!@#$%^&*()_+-=[]{}|;:',.<>?";
-        client.submitAppendRequest(data);
+        client.sendRequest(data);
         
         String payloadStr = new String(mockAPL.lastPayload);
         assertEquals(data, payloadStr);
@@ -85,7 +85,7 @@ public class ServiceClientTest {
         }
         String longData = sb.toString();
         
-        client.submitAppendRequest(longData);
+        client.sendRequest(longData);
         
         String payloadStr = new String(mockAPL.lastPayload);
         assertEquals(longData, payloadStr);
@@ -94,7 +94,7 @@ public class ServiceClientTest {
     @Test
     public void testClientIdPreserved() throws IOException {
         ServiceClient client2 = new ServiceClient(42, mockAPL, 2);
-        client2.submitAppendRequest("test");
+        client2.sendRequest("test");
         
         // Client ID should be preserved (verified by no exception)
         assertNotNull(mockAPL.lastPayload);
@@ -103,13 +103,13 @@ public class ServiceClientTest {
     @Test
     public void testTargetReplicaCorrect() throws IOException {
         ServiceClient client1 = new ServiceClient(0, mockAPL, 1);
-        client1.submitAppendRequest("test1");
+        client1.sendRequest("test1");
         assertEquals(1, mockAPL.targetReplica);
         
         mockAPL.reset();
         
         ServiceClient client2 = new ServiceClient(1, mockAPL, 2);
-        client2.submitAppendRequest("test2");
+        client2.sendRequest("test2");
         assertEquals(2, mockAPL.targetReplica);
     }
     

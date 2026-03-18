@@ -5,6 +5,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.weavechain.curve25519.Scalar;
+
 /**
  * ByzantineQuorumCertificate: A Byzantine-fault-tolerant quorum certificate.
  * 
@@ -18,6 +20,7 @@ public class QuorumCertificate implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private final long view;
+    private final Node node = null;
     private final byte[] blockHash;
     private final int requiredVotes;
     private final String phase;  // "prepare", "precommit", or "commit"
@@ -100,5 +103,18 @@ public class QuorumCertificate implements Serializable {
         return "ByzQC[view=" + view + ", phase=" + phase +
                ", votes=" + signedVotes.size() + "/" + requiredVotes +
                ", aggregated=" + (aggregatedSignature != null) + "]";
+    }
+
+    @Override
+    public boolean equals(Object obj){
+        if (!(obj instanceof QuorumCertificate)) {
+            return false;
+        }
+        QuorumCertificate other = (QuorumCertificate) obj;
+
+        if (this.phase.equals(other.phase) && this.view == other.view && this.node.equals(other.node)){
+            return true;
+        }
+        return false;
     }
 }

@@ -19,12 +19,20 @@ public class BlockchainService implements APLListener, ConsensusListener {
     private final AuthenticatedPerfectLinksImpl apl;
     private int serverID;
 
-    private final Map<Long, Integer> pendingClientByRequestId = new ConcurrentHashMap<>();
+    private final Map<Integer, Integer> pendingClientByRequestId = new ConcurrentHashMap<>();
 
     private Map<Long, Integer> confirmingRequest = new ConcurrentHashMap<>();
 
     private int f=0;
     
+    //Remove Later the constructor below
+    public BlockchainService() {
+        this.serviceId = 0;
+        this.apl = null;
+        this.log = null;
+        this.serverID= 0;
+        this.f=0;
+    }
     public BlockchainService(int serviceId, AuthenticatedPerfectLinksImpl apl, int serverID, int f) {
         this.serviceId = serviceId;
         this.apl = apl;
@@ -48,25 +56,25 @@ public class BlockchainService implements APLListener, ConsensusListener {
         }
         */
 
-        AppendResponse reply = AppendResponse.tryDecode(data);
+        ServiceMessage reply = ServiceMessage.deserialize(data);
         if (reply != null) {
             handleServerReply(reply);
             return;
         }
 
-        AppendRequest request = AppendRequest.tryDecode(data);
+        ServiceMessage request = ServiceMessage.deserialize(data);
         if (request != null) {
             handleClientRequest(senderId, request);
         }
     }
 
-    private void handleClientRequest(int clientId, AppendRequest request) {
+    private void handleClientRequest(int clientId, ServiceMessage request) {
         pendingClientByRequestId.put(request.getRequestId(), clientId);
-        byte[] forwarded = AppendRequest.encode(request.getRequestId(), serviceId, request.getData());
+        byte[] forwarded = request.serialize();
         asyncSend(serverID, forwarded);
     }
 
-    private void handleServerReply(AppendResponse reply) {
+    private void handleServerReply(ServiceMessage reply) {
 
         if(checkNumberReply(reply)){
             return;
@@ -75,11 +83,11 @@ public class BlockchainService implements APLListener, ConsensusListener {
         Integer clientId = pendingClientByRequestId.remove(reply.getRequestId());
         //suspeito
         if (clientId == null) {
-            // If the mapping is absent, fall back to the client id encoded in the request id.
+            // If the mapping is absent, fall back to the client id serialized in the request id.
             clientId = (int) (reply.getRequestId() >>> 32);
         }
 
-        asyncSend(clientId, AppendResponse.encode(reply.getRequestId(), reply.isCommitted()));
+        asyncSend(clientId, reply.serialize());
         
         //int index = log.append(reply.getBlock().getData());
         //System.out.println("[BlockchainService] Committed entry " + index + ": \"" + reply.getBlock().getData() + "\"");
@@ -115,7 +123,7 @@ public class BlockchainService implements APLListener, ConsensusListener {
         return log.size();
     }
 
-    private Boolean checkNumberReply(AppendResponse reply){
+    private Boolean checkNumberReply(ServiceMessage reply){
         long replyID= reply.getRequestId();
 
         confirmingRequest.merge(replyID, 1, Integer::sum);

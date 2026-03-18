@@ -35,7 +35,7 @@ public class ServiceMessage implements Serializable{
         return commited;
     }
 
-    public byte[] encode() {
+    public byte[] serialize() {
         try {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             ObjectOutputStream oos = new ObjectOutputStream(bos);
@@ -47,7 +47,7 @@ public class ServiceMessage implements Serializable{
         return null;
     }
 
-    public static ServiceMessage tryDecode(byte[] payload) {
+    public static ServiceMessage deserialize(byte[] payload) {
         ByteArrayInputStream bis = new ByteArrayInputStream(payload);
         try {
             ObjectInputStream ois = new ObjectInputStream(bis);
@@ -56,5 +56,37 @@ public class ServiceMessage implements Serializable{
             System.err.println("Failed to decode message");
         }
         return null;
+    }
+
+        public boolean equals(Object obj){
+        if (!(obj instanceof ServiceMessage)) {
+            return false;
+        }
+        
+        ServiceMessage other = (ServiceMessage) obj;
+
+        if (!(this.requestId == other.requestId) ||
+            !(this.commited == other.commited )){
+            return false;
+        }
+
+        if (this.data == null) {
+            if (other.data != null) {
+                return false;
+            }
+        } else {
+            if (!this.data.equals(other.data)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    @Override
+    public String toString() {
+        return "ServiceMessage[requestId=" + requestId +
+        ", data=" + (data != null ? data.toString() : "null") +
+        ", commited=" + commited + "]";
     }
 }

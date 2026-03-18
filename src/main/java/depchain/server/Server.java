@@ -26,14 +26,14 @@ public class Server implements APLListener, ConsensusListener, ProposalReadyList
     private final BlockchainService blockchainService;
     private final AuthenticatedPerfectLinksImpl apl;
 
-    private final Queue<AppendRequest> pendingRequests = new ConcurrentLinkedQueue<>();
-    private final Queue<AppendRequest> inFlightRequests = new ConcurrentLinkedQueue<>();
+    private final Queue<ServiceMessage> pendingRequests = new ConcurrentLinkedQueue<>();
+    private final Queue<ServiceMessage> inFlightRequests = new ConcurrentLinkedQueue<>();
     private volatile boolean serverReadyToPropose;
-
+    /* 
     public Server(int serverId, List<Integer> allServerIds, AuthenticatedPerfectLinksImpl apl,
                   PrivateKey privateKey, Map<Integer, PublicKey> publicKeys) {
         this(serverId, allServerIds, apl, privateKey, publicKeys,    }
-
+    */ 
     public Server(int serverId, List<Integer> allServerIds, AuthenticatedPerfectLinksImpl apl,
                   PrivateKey privateKey, Map<Integer, PublicKey> publicKeys,
                   BlockchainService blockchainService) {
@@ -56,22 +56,18 @@ public class Server implements APLListener, ConsensusListener, ProposalReadyList
     @Override
     public void onMessage(int senderId, byte[] data) {
         try {
-            if (AppendResponse.tryDecode(data) != null) {
+            if (ServiceMessage.deserialize(data) != null) {
                 return;
             }
 
-            AppendRequest request = AppendRequest.tryDecode(data);
+            ServiceMessage request = ServiceMessage.deserialize(data);
             if (request != null) {
-                int replyTo = request.hasReplyTo() ? request.getReplyTo() : senderId;
-                AppendRequest normalized = new AppendRequest(request.getRequestId(), replyTo, request.getData());
+                //int replyTo = request.hasReplyTo() ? request.getReplyTo() : senderId;
+                ServiceMessage normalized = new ServiceMessage(request.getRequestId(), request.getData());
 
                 int leaderId = consensusNode.getLeader(consensusNode.getCurrentView());
                 if (leaderId != serverId) {
-                    asyncSend(leaderId, AppendRequest.encode(
-                        normalized.getRequestId(),
-                        normalized.getReplyTo(),
-                        normalized.getData())
-                    );
+                    asyncSend(leaderId, normalized.serialize());
                     return;
                 }
 
@@ -94,13 +90,13 @@ public class Server implements APLListener, ConsensusListener, ProposalReadyList
     public void onCommit(Block block) {
         blockchainService.onCommit(block);
 
-        AppendRequest committedRequest = inFlightRequests.poll();
+        ServiceMessage committedRequest = inFlightRequests.poll();
         if (committedRequest == null) {
             return;
         }
 
-        byte[] ack = AppendResponse.encode(committedRequest.getRequestId(), true);
-        asyncSend(committedRequest.getReplyTo(), ack);
+        byte[] ack = committedRequest.serialize();
+        //asyncSend(committedRequest, ack);
     }
 
     /**
@@ -117,7 +113,7 @@ public class Server implements APLListener, ConsensusListener, ProposalReadyList
             return;
         }
 
-        AppendRequest next = pendingRequests.poll();
+        ServiceMessage next = pendingRequests.poll();
         if (next == null) {
             return;
         }

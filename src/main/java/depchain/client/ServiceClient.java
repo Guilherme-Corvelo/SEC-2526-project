@@ -34,7 +34,7 @@ public class ServiceClient implements APLListener{
 
         ServiceMessage msg = new ServiceMessage(requestId, data);
 
-        byte[] payload = msg.encode();
+        byte[] payload = msg.serialize();
         try{
             apl.send(targetService, payload);
         }
@@ -50,7 +50,7 @@ public class ServiceClient implements APLListener{
 
     public void onMessage(int senderId, byte[] data){
 
-        ServiceMessage reply = ServiceMessage.tryDecode(data);
+        ServiceMessage reply = ServiceMessage.deserialize(data);
         if (reply != null) {
             int replyId = reply.getRequestId();
 
