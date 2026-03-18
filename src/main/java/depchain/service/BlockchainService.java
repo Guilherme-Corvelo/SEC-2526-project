@@ -20,12 +20,17 @@ public class BlockchainService implements APLListener, ConsensusListener {
     private int serverID;
 
     private final Map<Long, Integer> pendingClientByRequestId = new ConcurrentHashMap<>();
+
+    private Map<Long, Integer> confirmingRequest = new ConcurrentHashMap<>();
+
+    private int f=0;
     
-    public BlockchainService(int serviceId, AuthenticatedPerfectLinksImpl apl, int serverID) {
+    public BlockchainService(int serviceId, AuthenticatedPerfectLinksImpl apl, int serverID, int f) {
         this.serviceId = serviceId;
         this.apl = apl;
         this.log = new AppendOnlyLog();
         this.serverID= serverID;
+        this.f=f;
     }
 
     @Override
@@ -62,6 +67,10 @@ public class BlockchainService implements APLListener, ConsensusListener {
     }
 
     private void handleServerReply(AppendResponse reply) {
+
+        if(checkNumberReply(reply)){
+            return;
+        }
         
         Integer clientId = pendingClientByRequestId.remove(reply.getRequestId());
         //suspeito
@@ -104,5 +113,16 @@ public class BlockchainService implements APLListener, ConsensusListener {
      */
     public int getLogSize() {
         return log.size();
+    }
+
+    private Boolean checkNumberReply(AppendResponse reply){
+        long replyID= reply.getRequestId();
+
+        confirmingRequest.merge(replyID, 1, Integer::sum);
+
+        if(confirmingRequest.get(replyID)>f+1){
+            return true;
+        }
+        return false;
     }
 }

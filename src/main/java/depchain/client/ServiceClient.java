@@ -1,117 +1,71 @@
 package depchain.client;
 
-import depchain.consensus.HotStuffMessage;
+import depchain.Debug;
 import depchain.network.APLListener;
 import depchain.network.AuthenticatedPerfectLinksImpl;
-import depchain.service.AppendRequest;
-import depchain.service.AppendResponse;
+import depchain.service.ServiceMessage;
 
 import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.LinkedList;
 
 /**
  * Client
  */
 public class ServiceClient implements APLListener{
+
     private final int clientId;
-    private final AuthenticatedPerfectLinksImpl apl;
-    //private final int targetService;
-    private final int[] services;
-
-    private final AtomicInteger counterRequests = new AtomicInteger(1);
-
-    private final Map<Long, AppendRequest> pending = new ConcurrentHashMap<>();
-
-    private Map<Long, Integer> confirmingRequest = new ConcurrentHashMap<>();
-
-    private int f;
-
     
-    public ServiceClient(int clientId, AuthenticatedPerfectLinksImpl apl, int[] services, int f) {
+    private final AuthenticatedPerfectLinksImpl apl;
+    
+    private final int targetService;
+
+    private int counterRequests = 0;
+
+    private LinkedList<Integer> pending;
+    
+    public ServiceClient(int clientId, AuthenticatedPerfectLinksImpl apl, int targetService) {
         this.clientId = clientId;
         this.apl = apl;
-        this.services = services;
-        this.f=f;
+        this.targetService = targetService;
     }
     
-    public void submitMessageBlockService(String data) {
-        long requestId = nextRequestId();
+    public void sendRequest(String data) {
+        int requestId = nextRequestId();
 
-        byte[] payload = AppendRequest.encode(requestId, clientId, data);
+        ServiceMessage msg = new ServiceMessage(requestId, data);
 
-        //this so the leader eventually responds...
-        for (int service : services) {
-            try {
-                apl.send(service, payload);
-            } catch (IOException e) {
-                System.err.println("Error sending to service " + service);
-            }
+        byte[] payload = msg.encode();
+        try{
+            apl.send(targetService, payload);
+        }
+        catch(IOException e){
+            System.err.println(e);
         }
 
-        pending.put(requestId, null);
+        pending.add(requestId);
 
-        System.out.println("[Client-" + clientId + "] Submitted: \"" + data + "\"");
-
-        //awaitMessageResponse(requestId);
+        Debug.debug("[Client-" + clientId + "] Submitted: \"" + data + "\"");
     }
 
-    //public void awaitMessageResponse(long requestId){
-
-    //}
 
     public void onMessage(int senderId, byte[] data){
 
-        AppendResponse reply = AppendResponse.tryDecode(data);
+        ServiceMessage reply = ServiceMessage.tryDecode(data);
         if (reply != null) {
-            handleServerReply(reply);
+            int replyId = reply.getRequestId();
+
+            if(pending.remove(Integer.valueOf(replyId))){
+                Debug.debug("The request was appended succesfully");
+            }
+            else{
+                Debug.debug("Unsolicited message!");
+            }
+
             return;
         }
-        
     }
 
-    public void handleServerReply(AppendResponse reply){
-        if(checkNumberReply(reply)){
-            return;
-        }
-        //probably check every reply
-
-        System.out.println("The request was appended succesfully");
-
-    }
-     
-
-    private Boolean checkNumberReply(AppendResponse reply){
-        long replyID= reply.getRequestId();
-
-        confirmingRequest.merge(replyID, 1, Integer::sum);
-
-        if(confirmingRequest.get(replyID)>f+1){
-            return true;
-        }
-        return false;
-    }
-
-
-    /**
-     * Submit a string to be appended to the consensus blockchain.
-     * 
-     * Phase 1: Fire-and-forget submission.
-     * The consensus layer will handle ordering (via ByzantineHotStuffNode)
-     * and commitment (via leader election and QC collection).
-     */
-    /*
-    public void submitAppendRequest(String data) throws IOException {
-        // For phase 1, just send the data as bytes via APL
-        byte[] payload = data.getBytes();
-        apl.send(targetService, payload);
-        System.out.println("[Client-" + clientId + "] Submitted: \"" + data + "\"");
-    }
-    */
-
-    private long nextRequestId() {
-        long counter = counterRequests.getAndIncrement() & 0xFFFF_FFFFL;
-        return (((long) clientId) << 32) | counter;
+    private int nextRequestId() {
+        return this.counterRequests++;
     }
 }

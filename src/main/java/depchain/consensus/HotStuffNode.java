@@ -885,7 +885,7 @@ public class HotStuffNode implements APLListener {
         return sb.toString();
     }
 
-    protected int getLeader(long view) {
+    public int getLeader(long view) {
         return (int) (view % nodeIds.size());
     }
 
