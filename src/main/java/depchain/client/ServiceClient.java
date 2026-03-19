@@ -2,33 +2,35 @@ package depchain.client;
 
 import depchain.Debug;
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinksImpl;
+import depchain.network.APL;
 import depchain.service.ServiceMessage;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.util.LinkedList;
+import java.util.Map;
 
 /**
  * Client
  */
 public class ServiceClient implements APLListener{
-
-    private final int clientId;
-    
-    private final AuthenticatedPerfectLinksImpl apl;
-    
-    private final int targetService;
-
+    private APL apl;
+    private int targetService;
     private int counterRequests = 0;
+    private LinkedList<Integer> pending = new LinkedList<>();
+    
+    public ServiceClient(int clientId,
+                    int port, Map<Integer, InetSocketAddress> serviceAddress,
+                    PrivateKey privateKey, Map<Integer, PublicKey> publicKeys) throws IOException{
 
-    private LinkedList<Integer> pending;
-    
-    public ServiceClient(int clientId, AuthenticatedPerfectLinksImpl apl, int targetService) {
-        this.clientId = clientId;
-        this.apl = apl;
-        this.targetService = targetService;
+        this.apl = new APL(clientId, port, serviceAddress, privateKey, publicKeys);
+        this.apl.registerListener(this);
+        this.targetService = serviceAddress.keySet().iterator().next();
+        this.apl.start();
     }
-    
+        
     public void sendRequest(String data) {
         int requestId = nextRequestId();
 
@@ -44,13 +46,12 @@ public class ServiceClient implements APLListener{
 
         pending.add(requestId);
 
-        Debug.debug("[Client-" + clientId + "] Submitted: \"" + data + "\"");
+        Debug.debug("[Client-" + "] Submitted: \"" + data + "\"");
     }
 
-
     public void onMessage(int senderId, byte[] data){
-
         ServiceMessage reply = ServiceMessage.deserialize(data);
+        Debug.debug("Client received msg: " + reply.toString());
         if (reply != null) {
             int replyId = reply.getRequestId();
 

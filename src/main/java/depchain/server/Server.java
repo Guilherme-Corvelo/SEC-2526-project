@@ -5,7 +5,7 @@ import depchain.consensus.ConsensusListener;
 import depchain.consensus.HotStuffNode;
 import depchain.consensus.ProposalReadyListener;
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinksImpl;
+import depchain.network.APL;
 import depchain.service.ServiceMessage;
 import depchain.service.BlockchainService;
 
@@ -19,22 +19,22 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Server bridge between networking, consensus node, and blockchain service.
- */
-public class Server implements APLListener, ConsensusListener, ProposalReadyListener {
+
+public class Server implements APLListener, ProposalReadyListener {
     private final int serverId;
     private final HotStuffNode consensusNode;
     private final BlockchainService blockchainService;
-    private final AuthenticatedPerfectLinksImpl apl;
+    private final APL apl;
 
     private final Queue<ServiceMessage> pendingRequests = new ConcurrentLinkedQueue<>();
     private final Queue<ServiceMessage> inFlightRequests = new ConcurrentLinkedQueue<>();
     private volatile boolean serverReadyToPropose;
     /* 
-    public Server(int serverId, List<Integer> allServerIds, AuthenticatedPerfectLinksImpl apl,
+    public Server(int serverId, List<Integer> allServerIds, APL apl,
                   PrivateKey privateKey, Map<Integer, PublicKey> publicKeys) {
         this(serverId, allServerIds, apl, privateKey, publicKeys,    }
-    */ 
-    public Server(int serverId, List<Integer> allServerIds, AuthenticatedPerfectLinksImpl apl,
+
+    public Server(int serverId, List<Integer> allServerIds, APL apl,
                   PrivateKey privateKey, Map<Integer, PublicKey> publicKeys,
                   BlockchainService blockchainService) {
         this.serverId = serverId;
@@ -42,6 +42,7 @@ public class Server implements APLListener, ConsensusListener, ProposalReadyList
         this.blockchainService = blockchainService;
         this.serverReadyToPropose = false;
 
+        /* 
         this.consensusNode = new HotStuffNode(
             serverId, allServerIds, apl, this, privateKey, publicKeys, this
         );
@@ -52,7 +53,7 @@ public class Server implements APLListener, ConsensusListener, ProposalReadyList
 
     /**
      * Routes service requests and forwards consensus traffic to the node.
-     */
+
     @Override
     public void onMessage(int senderId, byte[] data) {
         try {
@@ -83,9 +84,8 @@ public class Server implements APLListener, ConsensusListener, ProposalReadyList
         }
     }
 
-    /**
      * Persist commit and acknowledge the corresponding service request.
-     */
+   
     @Override
     public void onCommit(Block block) {
         blockchainService.onCommit(block);
@@ -98,10 +98,10 @@ public class Server implements APLListener, ConsensusListener, ProposalReadyList
         byte[] ack = committedRequest.serialize();
         //asyncSend(committedRequest, ack);
     }
-
+  */
     /**
      * Consensus algorithm decides when leader is ready; server only reacts to that signal.
-     */
+
     @Override
     public void onReadyToPropose() {
         serverReadyToPropose = true;
@@ -164,3 +164,4 @@ public class Server implements APLListener, ConsensusListener, ProposalReadyList
         }).start();
     }
 }
+*/

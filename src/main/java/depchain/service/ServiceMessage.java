@@ -58,7 +58,7 @@ public class ServiceMessage implements Serializable{
         return null;
     }
 
-        public boolean equals(Object obj){
+    public boolean equals(Object obj){
         if (!(obj instanceof ServiceMessage)) {
             return false;
         }

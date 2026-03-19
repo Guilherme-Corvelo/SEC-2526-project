@@ -1,20 +1,16 @@
 package depchain.replica;
 
-import depchain.consensus.Block;
-import depchain.consensus.HotStuffNode;
-import depchain.consensus.ConsensusListener;
-import depchain.consensus.ProposalReadyListener;
+import depchain.Debug;
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinksImpl;
-import depchain.service.BlockchainService;
+import depchain.network.APL;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.List;
+import java.util.LinkedList;
 import java.util.Map;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
+
 
 /**
  * Replica: A blockchain replica that handles both consensus and client requests.
@@ -28,14 +24,71 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * and collects a quorum of new-view messages, it automatically proposes a block
  * containing all buffered client data.
  */
-public class Replica implements APLListener, ConsensusListener, ProposalReadyListener {
-    private final int replicaId;
-    private final HotStuffNode consensusNode;
-    private final BlockchainService blockchainService;
+public class Replica implements APLListener{
+    private final APL apl;
+    private ReplicaListener listener = null;
+    private LinkedList<Integer> broadcastTo;
+
+    public Replica(int replicaId, 
+                    int port, Map<Integer, InetSocketAddress> addresses,
+                    PrivateKey privateKey, Map<Integer, PublicKey> publicKeys){
+
+        this.apl = new APL(replicaId, port, addresses, privateKey, publicKeys);
+        this.apl.registerListener(this);
+        this.broadcastTo = new LinkedList<Integer>(addresses.keySet());
+
+        Debug.debug("Replica was initialized\n");
+    }
+
+    public Replica(int replicaId, 
+                    int port, Map<Integer, InetSocketAddress> addresses,
+                    PrivateKey privateKey, Map<Integer, PublicKey> publicKeys,
+                    LinkedList<Integer> broadcastTo){
+
+        this.apl = new APL(replicaId, port, addresses, privateKey, publicKeys);
+        this.broadcastTo = broadcastTo;
+
+        Debug.debug("Replica was initialized\n");
+    }
+
+    public void blockingSend(int receiverId, byte[] msg){
+        try {
+            apl.send(receiverId, msg);
+        } catch (Exception e) {
+            System.err.print(e.getMessage());
+        }
+    }
+
+    //TODO:WHy no work
+    public void send(int receiverId, byte[] msg){
+        new Thread(() -> {
+            blockingSend(receiverId, msg);
+        });
+    }
+
+    public void  broadcast(byte[] msg){
+        broadcastTo.forEach(receiverId -> {
+            send(receiverId, msg);
+        });
+    }
+
+    @Override
+    public void onMessage(int senderId, byte[] data) {
+        Debug.debug("Replica received msg: " + data.toString());
+        listener.onMessage(senderId, data);
+    }
+
+    public void setListener(ReplicaListener listener) {
+        this.listener = listener;
+    }
+    public void start() throws IOException{
+        apl.start();
+    }
+    /*
     private final Queue<String> clientDataBuffer;
     private volatile long readyView;
 
-    public Replica(int replicaId, List<Integer> allReplicaIds, AuthenticatedPerfectLinksImpl apl,
+    public Replica(int replicaId, List<Integer> allReplicaIds, APL apl,
                    PrivateKey privateKey, Map<Integer, PublicKey> publicKeys) {
         this.replicaId = replicaId;
         this.clientDataBuffer = new ConcurrentLinkedQueue<>();
@@ -55,40 +108,25 @@ public class Replica implements APLListener, ConsensusListener, ProposalReadyLis
         System.out.println("[Replica-" + replicaId + "] Initialized");
     }
 
-    /**
-     * Called by APL when client data arrives.
-     * Buffers the data for later proposal when this replica becomes leader.
-     */
-    @Override
-    public void onMessage(int senderId, byte[] data) {
-        try {
-            // Convert bytes back to string (client sends as string bytes)
-            String clientData = new String(data);
-            clientDataBuffer.add(clientData);
-            System.out.println("[Replica-" + replicaId + "] Buffered client data: \"" + clientData + "\"");
+    
+     //Called by APL when client data arrives.
+    //Buffers the data for later proposal when this replica becomes leader.
+    
 
-            // If this replica is the current leader and ready to propose, propose immediately
-            if (isCurrentLeader() && isReadyForCurrentView() && !clientDataBuffer.isEmpty()) {
-                proposeBufferedData();
-            }
-        } catch (Exception e) {
-            System.err.println("[Replica-" + replicaId + "] Error processing client data: " + e.getMessage());
-        }
-    }
 
-    /**
-     * Called by consensus layer when a block is committed.
-     * Forwards to blockchain service for persistence.
-     */
+    
+     //Called by consensus layer when a block is committed.
+     // Forwards to blockchain service for persistence.
+     
     @Override
     public void onCommit(Block block) {
         blockchainService.onCommit(block);
     }
 
-    /**
-     * Called when this replica becomes ready to propose (after collecting new-view quorum).
-     * If we have buffered client data, propose it now.
-     */
+    
+     /Called when this replica becomes ready to propose (after collecting new-view quorum).
+    //If we have buffered client data, propose it now.
+    
     public void onReadyToPropose() {
         readyView = consensusNode.getCurrentView();
         System.out.println("[Replica-" + replicaId + "] Ready to propose blocks");
@@ -98,9 +136,9 @@ public class Replica implements APLListener, ConsensusListener, ProposalReadyLis
         }
     }
 
-    /**
-     * Propose all buffered client data as a single block.
-     */
+    
+    //Propose all buffered client data as a single block.
+    
     private void proposeBufferedData() {
         if (clientDataBuffer.isEmpty()) {
             return;
@@ -162,4 +200,7 @@ public class Replica implements APLListener, ConsensusListener, ProposalReadyLis
     public HotStuffNode getConsensusNode() {
         return consensusNode;
     }
+    */
+
+
 }

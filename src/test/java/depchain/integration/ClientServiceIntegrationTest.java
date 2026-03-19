@@ -3,7 +3,7 @@ package depchain.integration;
 import depchain.client.ServiceClient;
 import depchain.consensus.Block;
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinksImpl;
+import depchain.network.APL;
 import depchain.service.BlockchainService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * Note: These tests use mock APL to focus on the consensus and service layers.
  * Full integration tests with real networking are in ReplicaTest.
- */
+
 public class ClientServiceIntegrationTest {
     
     private ServiceClient client;
@@ -122,8 +122,7 @@ public class ClientServiceIntegrationTest {
      * Mock APL that simulates consensus behavior.
      * In real system, data would go through ByzantineHotStuffNode consensus.
      * Here we simulate: client → APL send → consensus commit → service.
-     */
-    private static class MockConsensusAPL extends AuthenticatedPerfectLinksImpl {
+    private static class MockConsensusAPL extends APL {
         private final BlockchainService service;
         private int sendCount = 0;
         
@@ -140,7 +139,6 @@ public class ClientServiceIntegrationTest {
         
         /**
          * Simulate consensus decision: convert bytes back to string and commit via service.
-         */
         synchronized void simulateConsensusCommit(String data) {
             // Create block and commit through service
             Block block = new Block(data);
@@ -157,3 +155,4 @@ public class ClientServiceIntegrationTest {
         public void registerListener(APLListener listener) {}
     }
 }
+ */

@@ -18,8 +18,8 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AuthenticatedPerfectLinksTest {
-    private AuthenticatedPerfectLinksImpl nodeA;
-    private AuthenticatedPerfectLinksImpl nodeB;
+    private APL nodeA;
+    private APL nodeB;
     private int portA = 20000;
     private int portB = 20001;
 
@@ -42,8 +42,8 @@ class AuthenticatedPerfectLinksTest {
         pubKeys.put(0, keysA.getPublic());
         pubKeys.put(1, keysB.getPublic());
 
-        nodeA = new AuthenticatedPerfectLinksImpl(0, portA, addresses, keysA.getPrivate(), pubKeys);
-        nodeB = new AuthenticatedPerfectLinksImpl(1, portB, addresses, keysB.getPrivate(), pubKeys);
+        nodeA = new APL(0, portA, addresses, keysA.getPrivate(), pubKeys);
+        nodeB = new APL(1, portB, addresses, keysB.getPrivate(), pubKeys);
 
         nodeA.start();
         nodeB.start();

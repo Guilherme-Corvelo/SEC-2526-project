@@ -1,7 +1,7 @@
 package depchain.consensus;
 
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinksImpl;
+import depchain.network.APL;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
@@ -351,7 +351,7 @@ class HotStuffNodeTest {
     
     // ============ Mock Classes ============
     
-    static class MockAPL extends AuthenticatedPerfectLinksImpl {
+    static class MockAPL extends APL {
         private APLListener listener;
 
         MockAPL() {
@@ -403,7 +403,7 @@ class HotStuffNodeTest {
         // original proposal, reflecting that a crashed leader might have been faulty.
 
         int[] ports = {22000, 22001, 22002, 22003};
-        List<AuthenticatedPerfectLinksImpl> apl = new ArrayList<>();
+        List<APL> apl = new ArrayList<>();
         List<HotStuffNode> nodes = new ArrayList<>();
         List<MockConsensusListener> listeners = new ArrayList<>();
         List<Integer> nodeIds = new ArrayList<>();
@@ -424,7 +424,7 @@ class HotStuffNodeTest {
 
         // start nodes
         for (int i = 0; i < ports.length; i++) {
-            AuthenticatedPerfectLinksImpl aplNode = new AuthenticatedPerfectLinksImpl(
+            APL aplNode = new APL(
                     i, ports[i], addresses, keyPairs.get(i).getPrivate(), pubKeys);
             aplNode.setMaxSendDuration(5000);
             aplNode.setResendTimeout(200);

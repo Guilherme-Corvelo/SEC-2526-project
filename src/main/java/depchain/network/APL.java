@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Implementation of Authenticated Perfect Links (APL) using UDP and public-key
  * signatures.
  */
-public class AuthenticatedPerfectLinksImpl {
+public class APL {
     private final int localId;
     private final int localPort;
     private final Map<Integer, InetSocketAddress> addresses;
@@ -71,7 +71,7 @@ public class AuthenticatedPerfectLinksImpl {
     // if true, all outgoing packets are silently discarded (testing only)
     volatile boolean dropAllSends = false;
 
-    public AuthenticatedPerfectLinksImpl(int localId,
+    public APL (int localId,
                                          int localPort,
                                          Map<Integer, InetSocketAddress> addresses,
                                          PrivateKey privateKey,

@@ -6,7 +6,7 @@ import com.weavechain.curve25519.Scalar;
 import com.weavechain.sig.ThresholdSigEd25519;
 import com.weavechain.sig.ThresholdSigEd25519Params;
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinksImpl;
+import depchain.network.APL;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -41,7 +41,7 @@ public class HotStuffNode implements APLListener {
 
     private final int nodeId;
     private final List<Integer> nodeIds;
-    private final AuthenticatedPerfectLinksImpl apl;
+    private final APL apl;
     private final ConsensusListener listener;
     private final ProposalReadyListener proposalReadyListener;
     private final Map<Integer, Integer> nodeIndexById;
@@ -85,13 +85,13 @@ public class HotStuffNode implements APLListener {
     private FailureDetector failureDetector;
     private Thread leaderMonitorThread;
 
-    public HotStuffNode(int nodeId, List<Integer> nodeIds, AuthenticatedPerfectLinksImpl apl,
+    public HotStuffNode(int nodeId, List<Integer> nodeIds, APL apl,
                                  ConsensusListener listener, PrivateKey privateKey,
                                  Map<Integer, PublicKey> publicKeys) {
         this(nodeId, nodeIds, apl, listener, privateKey, publicKeys, null);
     }
 
-    public HotStuffNode(int nodeId, List<Integer> nodeIds, AuthenticatedPerfectLinksImpl apl,
+    public HotStuffNode(int nodeId, List<Integer> nodeIds, APL apl,
                                  ConsensusListener listener, PrivateKey privateKey,
                                  Map<Integer, PublicKey> publicKeys, ProposalReadyListener proposalListener) {
         this.nodeId = nodeId;

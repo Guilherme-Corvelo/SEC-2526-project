@@ -1,39 +1,37 @@
 package depchain.service;
 
+import depchain.Debug;
 import depchain.consensus.Block;
 import depchain.consensus.ConsensusListener;
+import depchain.consensus.Message;
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinksImpl;
+import depchain.replica.Replica;
+import depchain.replica.ReplicaListener;
+import depchain.network.APL;
 
 import java.io.IOException;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Blockchain service
 */
-public class BlockchainService implements APLListener, ConsensusListener {
-    private final AppendOnlyLog log;
-    private final int serviceId;
-    private final AuthenticatedPerfectLinksImpl apl;
-    private int serverID;
-
-    private final Map<Integer, Integer> pendingClientByRequestId = new ConcurrentHashMap<>();
-
-    private Map<Long, Integer> confirmingRequest = new ConcurrentHashMap<>();
-
-    private int f=0;
+public class BlockchainService implements ReplicaListener {
+    private AppendOnlyLog log;
+    private Replica replica;
+    private Queue<ServiceMessage> requestQueue = new LinkedList<>();
+    private int f = 0;
     
-    //Remove Later the constructor below
-    public BlockchainService() {
-        this.serviceId = 0;
-        this.apl = null;
-        this.log = null;
-        this.serverID= 0;
-        this.f=0;
+    public BlockchainService(Replica replica) throws IOException{
+        this.log = new AppendOnlyLog();
+        this.replica = replica;
     }
-    public BlockchainService(int serviceId, AuthenticatedPerfectLinksImpl apl, int serverID, int f) {
+    
+    /* 
+    public BlockchainService(int serviceId, APL apl, int serverID, int f) {
         this.serviceId = serviceId;
         this.apl = apl;
         this.log = new AppendOnlyLog();
@@ -47,33 +45,33 @@ public class BlockchainService implements APLListener, ConsensusListener {
         int index = log.append(data);
         System.out.println("[BlockchainService] Committed entry " + index + ": \"" + data + "\"");
     }
-
+    */
     @Override
     public void onMessage(int senderId, byte[] data) {
-        /*
-        if (looksLikeJavaSerializedObject(data)) {
-            return;
-        }
-        */
-
-        ServiceMessage reply = ServiceMessage.deserialize(data);
-        if (reply != null) {
-            handleServerReply(reply);
-            return;
-        }
-
         ServiceMessage request = ServiceMessage.deserialize(data);
         if (request != null) {
-            handleClientRequest(senderId, request);
+            Debug.debug( "Sender ID : "+ senderId +  "received request : " + request.toString());
+            handleRequest(senderId, request);
+            return;
         }
+
+        /*
+        Message decideMessage = Message.deserialize(data);
+        if (decideMessage != null) {
+            handleServer(senderId, request);
+        }
+        */
     }
 
-    private void handleClientRequest(int clientId, ServiceMessage request) {
-        pendingClientByRequestId.put(request.getRequestId(), clientId);
-        byte[] forwarded = request.serialize();
-        asyncSend(serverID, forwarded);
+    private void handleRequest(int clientId, ServiceMessage request) {
+        requestQueue.add(request);
+        ServiceMessage reply = new ServiceMessage(request.getRequestId(), true);
+        Debug.debug("sending reply : " + reply.toString());
+        replica.blockingSend(clientId, reply.serialize());
+        //replica.broadcast(request.serialize());
     }
 
+    /* 
     private void handleServerReply(ServiceMessage reply) {
 
         if(checkNumberReply(reply)){
@@ -122,7 +120,7 @@ public class BlockchainService implements APLListener, ConsensusListener {
     public int getLogSize() {
         return log.size();
     }
-
+    /*
     private Boolean checkNumberReply(ServiceMessage reply){
         long replyID= reply.getRequestId();
 
@@ -133,4 +131,5 @@ public class BlockchainService implements APLListener, ConsensusListener {
         }
         return false;
     }
+    */
 }

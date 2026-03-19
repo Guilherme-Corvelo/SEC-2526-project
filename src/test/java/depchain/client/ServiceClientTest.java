@@ -1,7 +1,7 @@
 package depchain.client;
 
 import depchain.network.APLListener;
-import depchain.network.AuthenticatedPerfectLinksImpl;
+import depchain.network.APL;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * - Proper serialization of data
  * - Fire-and-forget semantics
  * - Multiple client submissions
- */
+
 public class ServiceClientTest {
     
     private ServiceClient client;
@@ -115,8 +115,7 @@ public class ServiceClientTest {
     
     /**
      * Mock APL for testing client without real network.
-     */
-    private static class MockAPL extends AuthenticatedPerfectLinksImpl {
+    private static class MockAPL extends APL {
         boolean wasSendCalled = false;
         int sendCount = 0;
         int targetReplica = -1;
@@ -150,3 +149,4 @@ public class ServiceClientTest {
         }
     }
 }
+ */

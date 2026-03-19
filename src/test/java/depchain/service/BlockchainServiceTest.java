@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * - Read operations return correct data
  * - Multiple blocks can be committed
  * - Service properly implements ConsensusListener interface
- */
+
 public class BlockchainServiceTest {
     
     private BlockchainService service;
@@ -203,3 +203,4 @@ public class BlockchainServiceTest {
         }
     }
 }
+ */

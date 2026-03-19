@@ -11,7 +11,7 @@ import java.util.Set;
 import com.weavechain.curve25519.Scalar;
 import com.weavechain.sig.ThresholdSigEd25519;
 
-import depchain.network.AuthenticatedPerfectLinksImpl;
+import depchain.network.APL;
 
 public class Message implements Serializable{
     private PhaseType type;
@@ -26,7 +26,7 @@ public class Message implements Serializable{
         this.node = node;
     }
 
-    public Scalar replicaComputeRi(Scalar privateShare, ThresholdSigEd25519 sigHelper , AuthenticatedPerfectLinksImpl apl){
+    public Scalar replicaComputeRi(Scalar privateShare, ThresholdSigEd25519 sigHelper , APL apl){
         try {
             Scalar Ri = sigHelper.computeRi(privateShare, node.getAction());
             return Ri;

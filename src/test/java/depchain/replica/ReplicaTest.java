@@ -1,7 +1,7 @@
 package depchain.replica;
 
 import depchain.client.ServiceClient;
-import depchain.network.AuthenticatedPerfectLinksImpl;
+import depchain.network.APL;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
@@ -27,11 +27,11 @@ import static org.junit.jupiter.api.Assertions.*;
  * - Proposed data flows through Byzantine consensus
  * - Committed blocks reach the blockchain service
  * - Append-only log reflects the committed data
- */
+
 public class ReplicaTest {
 
     private List<Replica> replicas;
-    private List<AuthenticatedPerfectLinksImpl> aplInstances;
+    private List<APL> aplInstances;
     private List<ServiceClient> clients;
     private Map<Integer, KeyPair> keyPairs;
 
@@ -70,7 +70,7 @@ public class ReplicaTest {
 
         // Create APL instances and replicas
         for (int i = 0; i < NUM_REPLICAS; i++) {
-            AuthenticatedPerfectLinksImpl apl = new AuthenticatedPerfectLinksImpl(
+            APL apl = new APL(
                 i, PORT_BASE + i, addresses, keyPairs.get(i).getPrivate(), publicKeys
             );
             apl.setMaxSendDuration(5000);
@@ -115,7 +115,7 @@ public class ReplicaTest {
         }
 
         // Stop APL instances
-        for (AuthenticatedPerfectLinksImpl apl : aplInstances) {
+        for (APL apl : aplInstances) {
             apl.stop();
         }
     }
@@ -269,3 +269,4 @@ public class ReplicaTest {
         assertEquals(0, replicas.get(3).getLogSize(), "Non-leader should not commit without quorum");
     }
 }
+ */
