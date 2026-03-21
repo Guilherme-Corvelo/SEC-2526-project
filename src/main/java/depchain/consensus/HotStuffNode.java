@@ -6,7 +6,10 @@ import com.weavechain.curve25519.Scalar;
 import com.weavechain.sig.ThresholdSigEd25519;
 import com.weavechain.sig.ThresholdSigEd25519Params;
 import depchain.network.APLListener;
+import depchain.Debug;
+import depchain.API.Request;
 import depchain.network.APL;
+import depchain.consensus.Type;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -14,6 +17,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetSocketAddress;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -25,10 +29,12 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
 
 /**
  * HotStuffNode: A replica in the Byzantine Fault Tolerant HotStuff consensus protocol.
@@ -36,6 +42,195 @@ import java.util.concurrent.ConcurrentHashMap;
  * Implements HotStuff with cryptographic signatures and Byzantine quorum certificates.
  */
 public class HotStuffNode implements APLListener {
+
+    private APL apl;
+    private int view = 0;
+    private int f;
+    private Node latestNode = new Node();
+    private QuorumCertificate prepareQC = null;
+    private QuorumCertificate lockedQC = null;
+
+    private LinkedList<Integer> broadcastTo;
+    private int id;
+    private int n;
+    private Type pendingVoteType = Type.NEWVIEW;
+    private HashMap<Integer, Message> votes = new HashMap<>();
+
+
+
+    public HotStuffNode(int id, 
+                    int port, Map<Integer, InetSocketAddress> addresses,
+                    PrivateKey privateKey, Map<Integer, PublicKey> publicKeys, int f, LinkedList<Integer> broadcastTo) throws IOException{
+
+        this.apl = new APL(id, port, addresses, privateKey, publicKeys);
+        this.apl.registerListener(this);
+        this.broadcastTo = broadcastTo;
+        this.n = broadcastTo.size();
+        this.f = f;
+        this.id = id;
+        this.apl.start();
+    }
+
+    public void onMessage(int senderId, byte[] payload){
+        Message message = Message.deserialize(payload);
+        if (message != null) {
+            Debug.debug( "Sender ID : "+ senderId +  "received message : " + message.toString());
+            handleMessage(senderId, message);
+            return;
+        }
+
+        Request request = Request.deserialize(payload);
+        if (request != null) {
+            Debug.debug( "Sender ID : "+ senderId +  "received message : " + request.toString());
+            handleRequest(senderId, request);
+            return;
+        }
+    }
+
+    //TODO:THINK about new type for hotstuff response
+    public void handleRequest(int senderId, Request request){
+        Node requestNode = new Node(request.getData(), latestNode);
+        //TODO:MAybe verification to extend?
+        Message NewViewMessage = new Message(Type.NEWVIEW, getView(), requestNode);
+        send(getLeaderId(), NewViewMessage.serialize());
+    }
+
+    public void handleMessage(int senderId, Message Message){
+        switch (Message.getType()) {
+            case NEWVIEW:
+                handleNewViewMessage(senderId, Message);
+                break;
+        
+            case PREPARE:
+                handlePrepareMessage(senderId, Message);
+                break;
+        
+            case PRECOMMIT:
+                handlePrecommitMessage(senderId, Message);
+                break;
+        
+            case COMMIT:
+                handleCommitMessage(senderId, Message);
+                break;
+        
+            case DECIDE:
+                handleDecideMessage(senderId, Message);
+                break;
+        
+            default:
+                break;
+        }
+    }
+
+    public void handleNewViewMessage(int senderId, Message msg){
+        if (getId() == getLeaderId()){
+            if (msg.getType() == pendingVoteType){
+                getVotes().putIfAbsent(senderId, msg);
+            }
+            //add to votes
+            if(enoughVotes()){
+                //TODO:Maybe think about node maybe everything
+                Message prepareMsg = new Message(Type.PREPARE, getView(), msg.getNode());
+
+                QuorumCertificate highQC = getHighQC();
+                setPrepareQC(highQC);
+                prepareMsg.setJustify(highQC);
+
+                broadcast(prepareMsg.serialize());
+            }
+        }
+    }
+
+    public void handlePrepareMessage(int senderId, Message Message){
+        if (getId() == getLeaderId()){
+            //add to votes
+            if(enoughVotes()){
+                //function to prepare
+            }
+        }
+    }
+
+    public void handlePrecommitMessage(int senderId, Message Message){
+        if (getId() == getLeaderId()){
+            if(enoughVotes()){
+                //function to prepare
+            }
+        }
+    }
+
+    public void handleCommitMessage(int senderId, Message Message){
+        if (getId() == getLeaderId()){
+            if(enoughVotes()){
+                //function to prepare
+            }
+        }
+    }
+
+    public void handleDecideMessage(int senderId, Message Message){
+        if (getId() == getLeaderId()){
+            if(enoughVotes()){
+                //function to prepare
+            }
+        }
+    }
+
+    private int getLeaderId(){
+        return broadcastTo.get(view%n);
+    }
+
+    private boolean enoughVotes(){
+        return getVotes().size() >= n - f;
+    }
+
+    public QuorumCertificate getHighQC(){
+        Message highestView = null;
+        for(Message m : getVotes().values()){
+            if (highestView.getView() < m.getView()|| highestView == null){
+                highestView = m;
+            }
+        }
+        return highestView.getjustify();
+    }
+
+    public QuorumCertificate getPrepareQC(){
+        return this.prepareQC;
+    }
+
+    public void setPrepareQC(QuorumCertificate qc){
+        this.prepareQC = qc;
+    }
+
+    public void send(int receiverId, byte[] msg){
+        try {
+            apl.send(receiverId, msg);
+        } catch (Exception e) {
+            System.err.print(e.getMessage());
+        }
+    }
+
+    public void broadcast(byte[] msg){
+        broadcastTo.forEach(receiverId -> {
+            send(receiverId, msg);
+        });
+    }
+
+
+    private int getId(){
+        return this.id;
+    }
+
+    private HashMap<Integer, Message> getVotes(){
+        return this.votes;
+    }
+
+    private int getView(){
+        return this.view;
+    }
+
+
+
+
+    /*
     private static final Map<String, ThresholdSigEd25519Params> THRESHOLD_CONTEXTS =
             new ConcurrentHashMap<>();
 
@@ -134,23 +329,14 @@ public class HotStuffNode implements APLListener {
                 ", f=" + maxFaults + ", quorumSize=" + byzantineQuorumSize);
     }
 
-    /**
-     * Set a custom failure detector (mainly for testing).
-     */
     public void setFailureDetector(FailureDetector fd) {
         this.failureDetector = fd;
     }
 
-    /**
-     * Register a listener for view change events.
-     */
     public void registerViewChangeListener(ViewChangeListener listener) {
         this.viewChangeListener = listener;
     }
 
-    /**
-     * Start the consensus node: register with APL and start failure detector.
-     */
     public void start() throws IOException {
         apl.registerListener(this);
 
@@ -171,9 +357,6 @@ public class HotStuffNode implements APLListener {
         }
     }
 
-    /**
-     * Stop the consensus node.
-     */
     public void stop() {
         if (failureDetector != null) {
             failureDetector.stop();
@@ -210,9 +393,6 @@ public class HotStuffNode implements APLListener {
         leaderMonitorThread.start();
     }
 
-    /**
-     * Trigger a view change when current leader is suspected crashed.
-     */
     private void triggerViewChange(int suspectedLeader) {
         currentView++;
         pendingBlock = null;
@@ -234,17 +414,11 @@ public class HotStuffNode implements APLListener {
         }
     }
 
-    /**
-     * Send a new-view message with this node's highest QC.
-     */
     public void sendNewView() throws IOException {
         NewView msg = new NewView(currentView, nodeId, highQC);
         broadcastConsensusMessage(msg);
     }
 
-    /**
-     * Called by the application layer to propose a new block.
-     */
     public synchronized void propose(String data) throws IOException {
         if (nodeId != getLeader(currentView)) {
             throw new IllegalStateException("Only the leader can propose");
@@ -325,9 +499,6 @@ public class HotStuffNode implements APLListener {
         }
     }
 
-    /**
-     * Hook for integration layers that need to react when the leader reaches new-view quorum.
-     */
     protected void onNewViewQuorum(long view) {
         if (proposalReadyListener == null) {
             return;
@@ -338,9 +509,6 @@ public class HotStuffNode implements APLListener {
         proposalReadyListener.onReadyToPropose();
     }
 
-    /**
-     * Byzantine variant of prepare handling: validates QC and safe-node predicate.
-     */
     protected void handlePrepare(Prepare msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
 
@@ -385,9 +553,6 @@ public class HotStuffNode implements APLListener {
         }
     }
 
-    /**
-     * Byzantine variant of pre-commit handling: validates prepare QC and signs a pre-commit vote.
-     */
     protected void handlePreCommit(PreCommit msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
 
@@ -414,9 +579,6 @@ public class HotStuffNode implements APLListener {
         }
     }
 
-    /**
-     * Byzantine variant of commit handling: validates pre-commit QC, locks, and signs commit vote.
-     */
     protected void handleCommit(Commit msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
 
@@ -446,18 +608,12 @@ public class HotStuffNode implements APLListener {
         }
     }
 
-    /**
-     * Create a signed vote for one phase.
-     */
     private SignedVote createSignedVote(long view, byte[] blockHash, String phase) throws Exception {
         byte[] message = serializeForSignature(view, blockHash, phase);
         byte[] signature = sign(message);
         return new SignedVote(view, nodeId, blockHash, phase, signature);
     }
 
-    /**
-     * Serialize view, block hash, and phase for signing.
-     */
     private byte[] serializeForSignature(long view, byte[] blockHash, String phase) throws Exception {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(bos);
@@ -476,9 +632,6 @@ public class HotStuffNode implements APLListener {
         return partialSignature.toByteArray();
     }
 
-    /**
-     * Verify a partial signature vote share.
-     */
     private boolean verifySignature(SignedVote vote) {
         try {
             Integer signerIndex = nodeIndexById.get(vote.getSenderId());
@@ -507,9 +660,6 @@ public class HotStuffNode implements APLListener {
         }
     }
 
-    /**
-     * Validate a Byzantine QC by verifying all included signatures.
-     */
     private boolean validateQC(QuorumCertificate byzQC) {
         if (byzQC == null || byzQC.getSignedVotes().isEmpty()) {
             System.err.println("[" + nodeId + "] Invalid QC: no signed votes");
@@ -643,9 +793,6 @@ public class HotStuffNode implements APLListener {
         }
     }
 
-    /**
-     * Handle and validate a SignedVote message.
-     */
     private void handleSignedVote(SignedVote vote) {
         if (!verifySignature(vote)) {
             System.err.println("[" + nodeId + "] Rejected vote with invalid signature from " +
@@ -674,9 +821,6 @@ public class HotStuffNode implements APLListener {
         }
     }
 
-    /**
-     * Leader-side prepare vote aggregation.
-     */
     private void handlePrepareVote(SignedVote vote) {
         if (nodeId != getLeader(currentView)) {
             return;
@@ -720,9 +864,6 @@ public class HotStuffNode implements APLListener {
         System.out.println("[" + nodeId + "] Queued pre-commit broadcast: " + precommit);
     }
 
-    /**
-     * Leader-side pre-commit vote aggregation.
-     */
     private void handlePreCommitVote(SignedVote vote) {
         if (nodeId != getLeader(currentView)) {
             return;
@@ -766,9 +907,6 @@ public class HotStuffNode implements APLListener {
         System.out.println("[" + nodeId + "] Queued commit broadcast: " + commit);
     }
 
-    /**
-     * Leader-side commit vote aggregation.
-     */
     private void handleCommitVote(SignedVote vote) {
         if (nodeId != getLeader(currentView)) {
             return;
@@ -815,9 +953,6 @@ public class HotStuffNode implements APLListener {
         commitBlock(vote.getView());
     }
 
-    /**
-     * Handle decide and commit locally.
-     */
     protected void handleDecide(Decide msg) {
         System.out.println("[" + nodeId + "] Received: " + msg);
 
@@ -838,9 +973,6 @@ public class HotStuffNode implements APLListener {
         commitBlock(msg.getView());
     }
 
-    /**
-     * Commit the pending block, advance view, and send new-view.
-     */
     protected void commitBlock(long view) {
         if (pendingBlock != null) {
             log.add(pendingBlock);
@@ -864,9 +996,7 @@ public class HotStuffNode implements APLListener {
         }
     }
 
-    /**
-     * Move local state to a newer view and clear all per-view state.
-     */
+
     private void advanceToView(long view) {
         currentView = view;
         pendingBlock = null;
@@ -976,4 +1106,5 @@ public class HotStuffNode implements APLListener {
         commitBroadcastedViews.clear();
         decideBroadcastedViews.clear();
     }
+*/
 }

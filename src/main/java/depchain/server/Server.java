@@ -1,12 +1,8 @@
 package depchain.server;
 
-import depchain.consensus.Block;
-import depchain.consensus.ConsensusListener;
 import depchain.consensus.HotStuffNode;
-import depchain.consensus.ProposalReadyListener;
 import depchain.network.APLListener;
 import depchain.network.APL;
-import depchain.service.ServiceMessage;
 import depchain.service.BlockchainService;
 
 import java.io.IOException;
@@ -26,8 +22,8 @@ public class Server implements APLListener, ProposalReadyListener {
     private final BlockchainService blockchainService;
     private final APL apl;
 
-    private final Queue<ServiceMessage> pendingRequests = new ConcurrentLinkedQueue<>();
-    private final Queue<ServiceMessage> inFlightRequests = new ConcurrentLinkedQueue<>();
+    private final Queue<Request> pendingRequests = new ConcurrentLinkedQueue<>();
+    private final Queue<Request> inFlightRequests = new ConcurrentLinkedQueue<>();
     private volatile boolean serverReadyToPropose;
     /* 
     public Server(int serverId, List<Integer> allServerIds, APL apl,
@@ -57,14 +53,14 @@ public class Server implements APLListener, ProposalReadyListener {
     @Override
     public void onMessage(int senderId, byte[] data) {
         try {
-            if (ServiceMessage.deserialize(data) != null) {
+            if (Request.deserialize(data) != null) {
                 return;
             }
 
-            ServiceMessage request = ServiceMessage.deserialize(data);
+            Request request = Request.deserialize(data);
             if (request != null) {
                 //int replyTo = request.hasReplyTo() ? request.getReplyTo() : senderId;
-                ServiceMessage normalized = new ServiceMessage(request.getRequestId(), request.getData());
+                Request normalized = new Request(request.getRequestId(), request.getData());
 
                 int leaderId = consensusNode.getLeader(consensusNode.getCurrentView());
                 if (leaderId != serverId) {
@@ -90,7 +86,7 @@ public class Server implements APLListener, ProposalReadyListener {
     public void onCommit(Block block) {
         blockchainService.onCommit(block);
 
-        ServiceMessage committedRequest = inFlightRequests.poll();
+        Request committedRequest = inFlightRequests.poll();
         if (committedRequest == null) {
             return;
         }
@@ -113,7 +109,7 @@ public class Server implements APLListener, ProposalReadyListener {
             return;
         }
 
-        ServiceMessage next = pendingRequests.poll();
+        Request next = pendingRequests.poll();
         if (next == null) {
             return;
         }

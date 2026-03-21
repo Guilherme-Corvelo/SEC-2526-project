@@ -1,6 +1,6 @@
 package depchain.replica;
 
-import depchain.client.ServiceClient;
+import depchain.client.Client;
 import depchain.network.APL;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

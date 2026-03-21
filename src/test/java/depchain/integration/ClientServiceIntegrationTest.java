@@ -1,7 +1,6 @@
 package depchain.integration;
 
-import depchain.client.ServiceClient;
-import depchain.consensus.Block;
+import depchain.client.Client;
 import depchain.network.APLListener;
 import depchain.network.APL;
 import depchain.service.BlockchainService;

@@ -5,8 +5,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.weavechain.curve25519.Scalar;
-
 /**
  * ByzantineQuorumCertificate: A Byzantine-fault-tolerant quorum certificate.
  * 
@@ -19,90 +17,39 @@ import com.weavechain.curve25519.Scalar;
 public class QuorumCertificate implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    private final long view;
-    private final Node node = null;
-    private final byte[] blockHash;
-    private final int requiredVotes;
-    private final String phase;  // "prepare", "precommit", or "commit"
-    private final Map<Integer, SignedVote> signedVotes = new HashMap<>();
-    private byte[] aggregatedSignature;
+    private Type type;
+    private int view;
+    private Node node;
+    private byte[] tresholdSig;
     
-    public QuorumCertificate(long view, String phase, byte[] blockHash, int requiredVotes) {
+    public QuorumCertificate(Type type, int view, Node node, byte[] tresholdSig) {
+        this.type = type;
         this.view = view;
-        this.blockHash = blockHash.clone();
-        this.requiredVotes = requiredVotes;
-        this.phase = phase;
+        this.node = node;
+        this.tresholdSig = tresholdSig;
     }
 
-    public QuorumCertificate(long view, String phase, byte[] blockHash, int requiredVotes,
-                                                        Map<Integer, SignedVote> votes) {
-        this(view, phase, blockHash, requiredVotes);
+    public Type getType(){
+        return this.type;
+    }
 
-        for (SignedVote signedVote : votes.values()) {
-            if (signedVote.getView() != view) {
-                continue;
-            }
-            if (!phase.equals(signedVote.getPhase())) {
-                continue;
-            }
-            if (!Arrays.equals(blockHash, signedVote.getBlockHash())) {
-                continue;
-            }
-            this.addVote(signedVote.getSenderId(), signedVote);
+    public int getView() {
+        return this.view;
+    }
+
+    public Node getNode() {
+        return this.node;
+    }
+
+    public byte[] getSignature() {
+        return this.tresholdSig;
+    }
+
+    public boolean equals(QuorumCertificate qc){
+        if (this.type == qc.type && this.view == qc.view && this.node.equals(qc.node)){
+            return true;
         }
-    }
-
-    public long getView() {
-        return view;
-    }
-
-    public byte[] getBlockHash() {
-        return blockHash.clone();
-    }
-
-    public int getVoteCount() {
-        return signedVotes.size();
-    }
-
-    public boolean isSatisfied() {
-        return signedVotes.size() >= requiredVotes;
-    }
-    
-    public String getPhase() {
-        return phase;
-    }
-    
-    /**
-     * Add a signed vote to this QC.
-     */
-    public void addVote(int nodeId, SignedVote vote) {
-        signedVotes.put(nodeId, vote);
-    }
-    
-    /**
-     * Get the signed votes that constitute this QC.
-     */
-    public Map<Integer, SignedVote> getSignedVotes() {
-        return new HashMap<>(signedVotes);
-    }
-
-    public void setAggregatedSignature(byte[] aggregatedSignature) {
-        this.aggregatedSignature = aggregatedSignature != null ? aggregatedSignature.clone() : null;
-    }
-
-    public byte[] getAggregatedSignature() {
-        return aggregatedSignature != null ? aggregatedSignature.clone() : null;
-    }
-
-    public boolean hasAggregatedSignature() {
-        return aggregatedSignature != null;
-    }
-    
-    @Override
-    public String toString() {
-        return "ByzQC[view=" + view + ", phase=" + phase +
-               ", votes=" + signedVotes.size() + "/" + requiredVotes +
-               ", aggregated=" + (aggregatedSignature != null) + "]";
+        return false;
     }
 
     @Override
@@ -110,11 +57,35 @@ public class QuorumCertificate implements Serializable {
         if (!(obj instanceof QuorumCertificate)) {
             return false;
         }
+        
         QuorumCertificate other = (QuorumCertificate) obj;
 
-        if (this.phase.equals(other.phase) && this.view == other.view && this.node.equals(other.node)){
-            return true;
+        if (!(this.type == other.type) ||
+            !(this.view == other.view ) ||
+            !this.node.equals(node)){
+            return false;
         }
-        return false;
+
+        if (this.node == null) {
+            if (other.node != null) {
+                return false;
+            }
+        } else {
+            if (!this.node.equals(other.node)) {
+                return false;
+            }
+        }
+
+        if (this.tresholdSig == null) {
+            if (other.tresholdSig != null) {
+                return false;
+            }
+        } else {
+            if (!this.tresholdSig.equals(other.tresholdSig)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

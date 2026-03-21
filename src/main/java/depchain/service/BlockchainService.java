@@ -1,8 +1,7 @@
 package depchain.service;
 
 import depchain.Debug;
-import depchain.consensus.Block;
-import depchain.consensus.ConsensusListener;
+import depchain.API.Request;
 import depchain.consensus.Message;
 import depchain.network.APLListener;
 import depchain.replica.Replica;
@@ -22,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class BlockchainService implements ReplicaListener {
     private AppendOnlyLog log;
     private Replica replica;
-    private Queue<ServiceMessage> requestQueue = new LinkedList<>();
+    private Queue<Request> requestQueue = new LinkedList<>();
     private int f = 0;
     
     public BlockchainService(Replica replica) throws IOException{
@@ -48,7 +47,7 @@ public class BlockchainService implements ReplicaListener {
     */
     @Override
     public void onMessage(int senderId, byte[] data) {
-        ServiceMessage request = ServiceMessage.deserialize(data);
+        Request request = Request.deserialize(data);
         if (request != null) {
             Debug.debug( "Sender ID : "+ senderId +  "received request : " + request.toString());
             handleRequest(senderId, request);
@@ -63,16 +62,16 @@ public class BlockchainService implements ReplicaListener {
         */
     }
 
-    private void handleRequest(int clientId, ServiceMessage request) {
+    private void handleRequest(int clientId, Request request) {
         requestQueue.add(request);
-        ServiceMessage reply = new ServiceMessage(request.getRequestId(), true);
+        Request reply = new Request(request.getRequestId(), true);
         Debug.debug("sending reply : " + reply.toString());
         replica.blockingSend(clientId, reply.serialize());
         //replica.broadcast(request.serialize());
     }
 
     /* 
-    private void handleServerReply(ServiceMessage reply) {
+    private void handleServerReply(Request reply) {
 
         if(checkNumberReply(reply)){
             return;
@@ -121,7 +120,7 @@ public class BlockchainService implements ReplicaListener {
         return log.size();
     }
     /*
-    private Boolean checkNumberReply(ServiceMessage reply){
+    private Boolean checkNumberReply(Request reply){
         long replyID= reply.getRequestId();
 
         confirmingRequest.merge(replyID, 1, Integer::sum);

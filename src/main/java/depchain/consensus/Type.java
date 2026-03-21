@@ -1,5 +1,5 @@
 package depchain.consensus;
 
-public enum PhaseType{
+public enum Type{
     NEWVIEW, PREPARE, PRECOMMIT, COMMIT, DECIDE
 }

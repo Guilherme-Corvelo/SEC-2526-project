@@ -1,4 +1,4 @@
-package depchain.service;
+package depchain.API;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -6,33 +6,15 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
-/**
- * AppendRequest
- */
-public class ServiceMessage implements Serializable{
-    private final int requestId;
+public class Request implements Serializable{
     private String data = null;
-    private boolean commited=false;
 
-    public ServiceMessage(int requestId, String data) {
-        this.requestId = requestId;
+    public Request(String data) {
         this.data = data;
-    }
-    public ServiceMessage(int requestId, boolean commited) {
-        this.requestId = requestId;
-        this.commited = commited;
-    }
-
-    public int getRequestId() {
-        return requestId;
     }
 
     public String getData() {
         return data;
-    }
-
-    public boolean getCommited(){
-        return commited;
     }
 
     public byte[] serialize() {
@@ -47,28 +29,24 @@ public class ServiceMessage implements Serializable{
         return null;
     }
 
-    public static ServiceMessage deserialize(byte[] payload) {
+    public static Request deserialize(byte[] payload) {
         ByteArrayInputStream bis = new ByteArrayInputStream(payload);
         try {
             ObjectInputStream ois = new ObjectInputStream(bis);
-            return (ServiceMessage) ois.readObject();
+            return (Request) ois.readObject();
         } catch (Exception e) {
             System.err.println("Failed to decode message");
         }
         return null;
     }
 
+    @Override
     public boolean equals(Object obj){
-        if (!(obj instanceof ServiceMessage)) {
+        if (!(obj instanceof Request)) {
             return false;
         }
         
-        ServiceMessage other = (ServiceMessage) obj;
-
-        if (!(this.requestId == other.requestId) ||
-            !(this.commited == other.commited )){
-            return false;
-        }
+        Request other = (Request) obj;
 
         if (this.data == null) {
             if (other.data != null) {
@@ -85,8 +63,7 @@ public class ServiceMessage implements Serializable{
 
     @Override
     public String toString() {
-        return "ServiceMessage[requestId=" + requestId +
-        ", data=" + (data != null ? data.toString() : "null") +
-        ", commited=" + commited + "]";
+        return "ServiceMessage[requestId=" +
+        ", data=" + (data != null ? data.toString() : "null") + "]";
     }
 }

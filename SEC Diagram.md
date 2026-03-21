@@ -14,6 +14,17 @@ class Message{
     +equals(Message)
 }
 
+
+class Client{
+    +main()
+}
+
+class DepchainAPI{
+    -APL apl
+
+    +IssueAction(String action)
+}
+
 class Request{
 
     +marshall(Request)
@@ -29,13 +40,8 @@ class QC {
     +equals(QC)
 }
 
-class Replica{
-    -APL APL
-    +void start()
-    +void stop()
-}
-
 class HotStuffNode{
+    -APL
     -QC prepareQc
     -QC lockedQC
     -uint viewNumber
@@ -57,11 +63,7 @@ class APL{
 class TresholdSigs {
 }
 
-class Client{
-    -APL Link
 
-    +send(Request)
-}
 
 class Debug{
     +boolean Enabled

@@ -14,13 +14,13 @@ import com.weavechain.sig.ThresholdSigEd25519;
 import depchain.network.APL;
 
 public class Message implements Serializable{
-    private PhaseType type;
+    private Type type;
     private int viewNumber;
     private Node node;
     private QuorumCertificate justify = null;
     private Scalar  partialSign = null; 
 
-    public Message(PhaseType type, int viewNumber, Node node){
+    public Message(Type type, int viewNumber, Node node){
         this.type = type;
         this.viewNumber = viewNumber;
         this.node = node;
@@ -48,7 +48,7 @@ public class Message implements Serializable{
         this.justify = justify;
     }
 
-    public PhaseType getType(){
+    public Type getType(){
         return this.type;
     }
 

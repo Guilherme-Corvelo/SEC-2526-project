@@ -5,17 +5,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import depchain.Debug;
+import depchain.API.Request;
 import depchain.consensus.Message;
 import depchain.consensus.Node;
-import depchain.consensus.PhaseType;
-import depchain.service.ServiceMessage;
+import depchain.consensus.Type;
 
 public class SerializationTest {
     
     @Test
     void messageSerialization(){
         Node n1 = new Node();
-        Message msg1 = new Message(PhaseType.COMMIT, 0, n1);
+        Message msg1 = new Message(Type.COMMIT, 0, n1);
 
         Debug.debug("" + msg1.serialize().length);
 
@@ -29,11 +29,11 @@ public class SerializationTest {
     
     @Test
     void serviceMessageSerialization(){
-        ServiceMessage msg1 = new ServiceMessage(0, "Test");
+        Request msg1 = new Request("Test");
 
         Debug.debug("" + msg1.serialize().length);
 
-        ServiceMessage msg2 = ServiceMessage.deserialize(msg1.serialize());
+        Request msg2 = Request.deserialize(msg1.serialize());
         
         Debug.debug("[Message 1] " + msg1.toString());
         Debug.debug("[Message 2] " + msg2.toString());

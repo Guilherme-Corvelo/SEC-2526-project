@@ -11,7 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import depchain.Debug;
-import depchain.client.ServiceClient;
+import depchain.client.Client;
 import depchain.replica.Replica;
 import depchain.service.BlockchainService;
 
@@ -23,7 +23,7 @@ public class ClientServiceTest {
     
     private KeyPair keysA;
     private KeyPair keysB;
-    ServiceClient client;
+    Client client;
     Replica replica;
     BlockchainService service;
     @BeforeEach
@@ -41,7 +41,7 @@ public class ClientServiceTest {
         pubKeys.put(0, keysA.getPublic());
         pubKeys.put(1, keysB.getPublic());
 
-        client = new ServiceClient(0, portA, Clientaddresses, keysA.getPrivate(), pubKeys);
+        client = new Client(0, portA, Clientaddresses, keysA.getPrivate(), pubKeys);
 
         replica = new Replica(1, portB, Serviceaddresses, keysB.getPrivate(), pubKeys);
         service = new BlockchainService(replica);

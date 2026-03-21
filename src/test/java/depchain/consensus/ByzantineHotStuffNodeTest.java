@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 3. QC validation (protecting against fake quorum certificates)
  * 4. Replay attack prevention
  * 5. Byzantine quorum size (2f+1)
- */
+
 class HotStuffNodeTest {
     private List<HotStuffNode> nodes;
     private List<MockAPL> mockAPLs;
@@ -491,3 +491,4 @@ class HotStuffNodeTest {
         elected.propose("tx_after");
     }
 }
+ */

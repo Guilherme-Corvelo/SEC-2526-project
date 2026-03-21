@@ -14,9 +14,9 @@ public class Node implements Serializable{
         this.action = action;
     }
 
-    public Node (String action, Node mode ){
+    public Node (String action, Node parentNode ){
         try{
-            this.parentLink = extend(mode);
+            this.parentLink = extend(parentNode);
             this.action = action;
         } catch (NoSuchAlgorithmException e ) {
             System.err.print("Couldnt hash node parent link");
