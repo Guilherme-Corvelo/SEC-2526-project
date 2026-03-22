@@ -18,12 +18,16 @@ public class Message implements Serializable{
     private int viewNumber;
     private Node node;
     private QuorumCertificate justify = null;
-    private Scalar  partialSign = null; 
+    //private Scalar  partialSign = null; 
+    private String partialSign = null;
 
-    public Message(Type type, int viewNumber, Node node){
+    private int requesterId;
+
+    public Message(Type type, int viewNumber, Node node, int requesterId){
         this.type = type;
         this.viewNumber = viewNumber;
         this.node = node;
+        this.requesterId = requesterId;
     }
 
     public Scalar replicaComputeRi(Scalar privateShare, ThresholdSigEd25519 sigHelper , APL apl){
@@ -37,13 +41,19 @@ public class Message implements Serializable{
         return null;        
     }
 
+    /* 
     public void Vote(int myIndex, Scalar privateShare, Scalar Ri, Scalar k, Set<Integer> nodes, ThresholdSigEd25519 sigHelper) {
         // Todo receive info from Leader
         Scalar partialSign = sigHelper.computeSignature(myIndex, privateShare, Ri, k, nodes);
         this.partialSign = partialSign;
         //Todo Send this
     }
+    */
 
+    //TODO:Delete LAter
+    public void Vote(){
+        this.partialSign = "signed";
+    }
     public void setJustify(QuorumCertificate justify){
         this.justify = justify;
     }
@@ -64,8 +74,13 @@ public class Message implements Serializable{
         return this.justify;
     }
 
-    public Scalar getPartialSign() {
+    //TODO:CHange to corret type later
+    public String getPartialSign() {
         return this.partialSign;
+    }
+
+    public int getRequesterId(){
+        return this.requesterId;
     }
 
     public byte[] serialize(){
@@ -101,6 +116,7 @@ public class Message implements Serializable{
 
         if (!(this.type == other.type) ||
             !(this.viewNumber == other.viewNumber ) ||
+            !(this.requesterId == other.requesterId) ||
             !this.node.equals(node)){
             return false;
         }

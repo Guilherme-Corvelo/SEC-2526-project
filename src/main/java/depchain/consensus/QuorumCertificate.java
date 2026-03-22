@@ -1,10 +1,6 @@
 package depchain.consensus;
 
 import java.io.Serializable;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * ByzantineQuorumCertificate: A Byzantine-fault-tolerant quorum certificate.
  * 

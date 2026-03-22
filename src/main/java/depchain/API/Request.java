@@ -63,7 +63,7 @@ public class Request implements Serializable{
 
     @Override
     public String toString() {
-        return "ServiceMessage[requestId=" +
-        ", data=" + (data != null ? data.toString() : "null") + "]";
+        return "ServiceMessage[" +
+        "data=" + (data != null ? data.toString() : "null") + "]";
     }
 }

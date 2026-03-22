@@ -15,7 +15,7 @@ public class SerializationTest {
     @Test
     void messageSerialization(){
         Node n1 = new Node();
-        Message msg1 = new Message(Type.COMMIT, 0, n1);
+        Message msg1 = new Message(Type.COMMIT, 0, n1, 0);
 
         Debug.debug("" + msg1.serialize().length);
 

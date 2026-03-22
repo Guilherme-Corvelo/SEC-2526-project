@@ -1,17 +1,4 @@
 package depchain.integration;
-
-import depchain.client.Client;
-import depchain.network.APLListener;
-import depchain.network.APL;
-import depchain.service.BlockchainService;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
-import java.io.IOException;
-import java.util.HashMap;
-
-import static org.junit.jupiter.api.Assertions.*;
-
 /**
  * Integration tests for client → consensus → service flow.
  * 

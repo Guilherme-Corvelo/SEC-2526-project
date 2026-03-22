@@ -2,3 +2,5 @@
 *.lst
 *.txt
 *.xml
+*.dumpstream
+/target

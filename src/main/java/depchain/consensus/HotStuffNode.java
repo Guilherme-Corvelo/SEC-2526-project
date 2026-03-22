@@ -1,40 +1,18 @@
 package depchain.consensus;
 
-import com.weavechain.curve25519.CompressedEdwardsY;
-import com.weavechain.curve25519.EdwardsPoint;
-import com.weavechain.curve25519.Scalar;
-import com.weavechain.sig.ThresholdSigEd25519;
-import com.weavechain.sig.ThresholdSigEd25519Params;
 import depchain.network.APLListener;
 import depchain.Debug;
 import depchain.API.Request;
 import depchain.network.APL;
-import depchain.consensus.Type;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-
 
 /**
  * HotStuffNode: A replica in the Byzantine Fault Tolerant HotStuff consensus protocol.
@@ -54,9 +32,7 @@ public class HotStuffNode implements APLListener {
     private int id;
     private int n;
     private Type pendingVoteType = Type.NEWVIEW;
-    private HashMap<Integer, Message> votes = new HashMap<>();
-
-
+    private ConcurrentHashMap<Integer, Message> votes = new ConcurrentHashMap<>();
 
     public HotStuffNode(int id, 
                     int port, Map<Integer, InetSocketAddress> addresses,
@@ -74,14 +50,14 @@ public class HotStuffNode implements APLListener {
     public void onMessage(int senderId, byte[] payload){
         Message message = Message.deserialize(payload);
         if (message != null) {
-            Debug.debug( "Sender ID : "+ senderId +  "received message : " + message.toString());
+            Debug.debug( "At Node: " + getId() + "Sender ID : "+ senderId +  " received message : " + message.toString());
             handleMessage(senderId, message);
             return;
         }
 
         Request request = Request.deserialize(payload);
         if (request != null) {
-            Debug.debug( "Sender ID : "+ senderId +  "received message : " + request.toString());
+            Debug.debug( "At Node: " + getId() + "Sender ID : "+ senderId +  " received message : " + request.toString());
             handleRequest(senderId, request);
             return;
         }
@@ -89,32 +65,39 @@ public class HotStuffNode implements APLListener {
 
     //TODO:THINK about new type for hotstuff response
     public void handleRequest(int senderId, Request request){
+        Debug.debug( "At Node: " + getId() + " Handling request :" + request.toString());
         Node requestNode = new Node(request.getData(), latestNode);
         //TODO:MAybe verification to extend?
-        Message NewViewMessage = new Message(Type.NEWVIEW, getView(), requestNode);
+        Message NewViewMessage = new Message(Type.NEWVIEW, getView(), requestNode, senderId);
         send(getLeaderId(), NewViewMessage.serialize());
+        Debug.debug( "At Node: " + getId() + " Sent NewView message :" + NewViewMessage.toString() + "to leader: " + getLeaderId());
+        if (getId() != getLeaderId()){ setPendingVoteType(Type.PREPARE);}
     }
 
-    public void handleMessage(int senderId, Message Message){
-        switch (Message.getType()) {
+    public void handleMessage(int senderId, Message msg){
+        if (msg.getView() != getView()) {
+            return;
+        }
+        
+        switch (msg.getType()) {
             case NEWVIEW:
-                handleNewViewMessage(senderId, Message);
+                handleNewViewMessage(senderId, msg);
                 break;
         
             case PREPARE:
-                handlePrepareMessage(senderId, Message);
+                handlePrepareMessage(senderId, msg);
                 break;
         
             case PRECOMMIT:
-                handlePrecommitMessage(senderId, Message);
+                handlePrecommitMessage(senderId, msg);
                 break;
         
             case COMMIT:
-                handleCommitMessage(senderId, Message);
+                handleCommitMessage(senderId, msg);
                 break;
         
             case DECIDE:
-                handleDecideMessage(senderId, Message);
+                handleDecideMessage(senderId, msg);
                 break;
         
             default:
@@ -124,58 +107,162 @@ public class HotStuffNode implements APLListener {
 
     public void handleNewViewMessage(int senderId, Message msg){
         if (getId() == getLeaderId()){
-            if (msg.getType() == pendingVoteType){
+            if (msg.getType() == getPendingVoteType()){
                 getVotes().putIfAbsent(senderId, msg);
             }
-            //add to votes
+
             if(enoughVotes()){
                 //TODO:Maybe think about node maybe everything
-                Message prepareMsg = new Message(Type.PREPARE, getView(), msg.getNode());
+                Message prepareMsg = new Message(Type.PREPARE, getView(), msg.getNode(), msg.getRequesterId());
 
                 QuorumCertificate highQC = getHighQC();
-                setPrepareQC(highQC);
                 prepareMsg.setJustify(highQC);
+                setPendingVoteType(Type.PREPARE);
+                getVotes().clear();
 
                 broadcast(prepareMsg.serialize());
             }
         }
     }
 
-    public void handlePrepareMessage(int senderId, Message Message){
+    public void handlePrepareMessage(int senderId, Message msg){
         if (getId() == getLeaderId()){
+            if (msg.getType() == getPendingVoteType() && msg.getPartialSign() != null){
+                getVotes().putIfAbsent(senderId, msg);
+            }
             //add to votes
             if(enoughVotes()){
-                //function to prepare
+
+
+                Message precommitMsg = new Message(Type.PRECOMMIT, getView(), msg.getNode(), msg.getRequesterId());
+
+                QuorumCertificate highQC = new QuorumCertificate(Type.PRECOMMIT, getView(), msg.getNode(), combineVotes());
+                precommitMsg.setJustify(highQC);
+
+                setPendingVoteType(Type.PRECOMMIT);
+                getVotes().clear();
+
+                broadcast(precommitMsg.serialize());
             }
+        }
+        if(senderId == getLeaderId() && msg.getPartialSign() == null){
+            if (msg.getNode().canExtend(msg) &&
+                safeNode(msg.getNode(), msg.getjustify())){
+
+                setPrepareQC(msg.getjustify());
+                //TODO: Think aboiut teshdold signs
+                msg.Vote();
+                send(getLeaderId(), msg.serialize());
+                Debug.debug( "At Node: " + getId() + " Sent Prepare message :" + msg.toString() + "to leader: " + getLeaderId());
+                if (getId() != getLeaderId()){ setPendingVoteType(Type.PRECOMMIT);}
+            }
+
         }
     }
 
-    public void handlePrecommitMessage(int senderId, Message Message){
+    public void handlePrecommitMessage(int senderId, Message msg){
+        Debug.debug("Entered handle precommit node :" + getId());
         if (getId() == getLeaderId()){
+            if (msg.getType() == getPendingVoteType() && msg.getPartialSign() != null){
+                getVotes().putIfAbsent(senderId, msg);
+            }
+            //add to votes
             if(enoughVotes()){
-                //function to prepare
+
+
+                Message precommitMsg = new Message(Type.COMMIT, getView(), msg.getNode(), msg.getRequesterId());
+
+                QuorumCertificate highQC = new QuorumCertificate(Type.COMMIT, getView(), msg.getNode(), combineVotes());
+                precommitMsg.setJustify(highQC);
+
+                setPendingVoteType(Type.COMMIT);
+                getVotes().clear();
+                    
+                broadcast(precommitMsg.serialize());
+            }
+        }
+        if(senderId == getLeaderId() && msg.getPartialSign() == null){
+            Debug.debug("Entered if precommit node :" + getId());
+            if (msg.getNode().canExtend(msg) &&
+                safeNode(msg.getNode(), msg.getjustify())){
+                
+                setPrepareQC(msg.getjustify());
+                //TODO: Think aboiut teshdold signs
+                
+                msg.Vote();
+                setLockedQC(msg.getjustify());
+                send(getLeaderId(), msg.serialize());
+                Debug.debug( "At Node: " + getId() + " Sent Precommit message :" + msg.toString() + "to leader: " + getLeaderId());
+
+                if (getId() != getLeaderId()){ setPendingVoteType(Type.COMMIT);}
             }
         }
     }
 
-    public void handleCommitMessage(int senderId, Message Message){
+    public void handleCommitMessage(int senderId, Message msg){
         if (getId() == getLeaderId()){
-            if(enoughVotes()){
-                //function to prepare
+            if (msg.getType() == getPendingVoteType() && msg.getPartialSign() != null){
+                getVotes().putIfAbsent(senderId, msg);
             }
+            //add to votes
+            if(enoughVotes()){
+
+
+                Message precommitMsg = new Message(Type.DECIDE, getView(), msg.getNode(), msg.getRequesterId());
+
+                QuorumCertificate highQC = new QuorumCertificate(Type.DECIDE, getView(), msg.getNode(), combineVotes());
+                precommitMsg.setJustify(highQC);
+
+                setPendingVoteType(Type.DECIDE);
+                getVotes().clear();
+                broadcast(precommitMsg.serialize());
+            }
+        }
+        if(senderId == getLeaderId() && msg.getPartialSign() == null){
+            if (msg.getNode().canExtend(msg.getjustify().getNode()) &&
+                safeNode(msg.getNode(), msg.getjustify())){
+
+                
+                //TODO: Think aboiut teshdold signs
+                msg.Vote();
+                send(getLeaderId(), msg.serialize());
+                Debug.debug( "At Node: " + getId() + " Sent Commit message :" + msg.toString() + "to leader: " + getLeaderId());
+
+                if (getId() != getLeaderId()){ setPendingVoteType(Type.DECIDE);}
+            }
+        }
+
+    }
+
+    public void handleDecideMessage(int senderId, Message msg){
+        if (msg.getNode().canExtend(msg.getjustify().getNode()) &&
+            safeNode(msg.getNode(), msg.getjustify())){
+            //TODO: Think aboiut teshdold signs
+            latestNode = msg.getNode();
+            send(msg.getRequesterId(), msg.serialize());
+            Debug.debug( "At Node: " + getId() + " Sent Decide message :" + msg.toString() + "to leader: " + getLeaderId());
+
+            if (getId() != getLeaderId()){ setPendingVoteType(Type.NEWVIEW);}
         }
     }
 
-    public void handleDecideMessage(int senderId, Message Message){
-        if (getId() == getLeaderId()){
-            if(enoughVotes()){
-                //function to prepare
-            }
-        }
+    //Think about quorum certificate not starting at null, having qc initialized with genesis ndoe
+    private boolean safeNode(Node node, QuorumCertificate qc){
+        return getLockedQC() == null || node.canExtend(getLockedQC().getNode()) || qc.getView() > getLockedQC().getView();
     }
-
+    
     private int getLeaderId(){
         return broadcastTo.get(view%n);
+    }
+
+    //TODO: do it
+    private byte[] combineVotes(){
+        String combined = "";
+        for (Message m : getVotes().values()){
+            combined += m.getPartialSign();
+        }
+        
+        return combined.getBytes();
     }
 
     private boolean enoughVotes(){
@@ -185,7 +272,7 @@ public class HotStuffNode implements APLListener {
     public QuorumCertificate getHighQC(){
         Message highestView = null;
         for(Message m : getVotes().values()){
-            if (highestView.getView() < m.getView()|| highestView == null){
+            if (highestView == null || highestView.getView() < m.getView() ){
                 highestView = m;
             }
         }
@@ -200,8 +287,25 @@ public class HotStuffNode implements APLListener {
         this.prepareQC = qc;
     }
 
+    public QuorumCertificate getLockedQC(){
+        return this.lockedQC;
+    }
+
+    public void setLockedQC(QuorumCertificate qc){
+        this.lockedQC = qc;
+    }
+
+    public void setPendingVoteType(Type type){
+        this.pendingVoteType = type;
+    }
+
+    public Type getPendingVoteType(){
+        return this.pendingVoteType;
+    }
+
     public void send(int receiverId, byte[] msg){
         try {
+            Debug.debug("At Node: " + getId() + "Sending : " + msg.toString() + " to " + getLeaderId());
             apl.send(receiverId, msg);
         } catch (Exception e) {
             System.err.print(e.getMessage());
@@ -214,21 +318,17 @@ public class HotStuffNode implements APLListener {
         });
     }
 
-
     private int getId(){
         return this.id;
     }
 
-    private HashMap<Integer, Message> getVotes(){
+    private ConcurrentHashMap<Integer, Message> getVotes(){
         return this.votes;
     }
 
     private int getView(){
         return this.view;
     }
-
-
-
 
     /*
     private static final Map<String, ThresholdSigEd25519Params> THRESHOLD_CONTEXTS =

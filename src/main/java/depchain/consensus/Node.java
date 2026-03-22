@@ -2,8 +2,12 @@ package depchain.consensus;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+
+import depchain.Debug;
+
 import java.io.Serializable;
 import java.lang.String;
+import java.nio.charset.StandardCharsets;
 
 public class Node implements Serializable{
     private byte[] parentLink;
@@ -30,7 +34,13 @@ public class Node implements Serializable{
 
     private byte[] extend(Node prevNode) throws NoSuchAlgorithmException{
         MessageDigest md = MessageDigest.getInstance("SHA-512");
-        md.update(prevNode.getParentLink());
+        if (prevNode.getParentLink() != null){
+            md.update(prevNode.getParentLink());
+        }
+        Debug.debug(prevNode.action);
+        //TODO: BYTES are fucked, do claude search for byte equals bytes are cooked prints of bytes are cooked
+        Debug.debug("BBBBBBBBBBBBBBBB" + java.util.Arrays.toString(prevNode.getAction().getBytes(StandardCharsets.UTF_8)));
+        md.update(prevNode.action.getBytes(StandardCharsets.UTF_8));
         return  md.digest();
     }
 
@@ -40,6 +50,25 @@ public class Node implements Serializable{
 
     public byte[] getParentLink() {
         return this.parentLink;
+    }
+
+    public boolean canExtend(Node other){
+        try {
+            return getParentLink() == extend(other);
+        } catch (Exception e) {
+            return false;
+        } 
+    }
+
+    public boolean canExtend(Message msg){
+        try {
+            if(msg.getjustify() == null){
+                return true;
+            }
+            return getParentLink() == extend(msg.getjustify().getNode());
+        } catch (Exception e) {
+            return false;
+        } 
     }
     
     @Override

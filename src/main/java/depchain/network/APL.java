@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import depchain.Debug;
+
 /**
  * Implementation of Authenticated Perfect Links (APL) using UDP and public-key
  * signatures.
@@ -112,6 +114,7 @@ public class APL {
                             new DatagramPacket(wire, wire.length, dst.getAddress(), dst.getPort());
                     // record last transmission time for RTT estimation
                     sendTimestamp.put(destId, System.currentTimeMillis());
+                    Debug.debug("APL SENT: " + packet.toString() + " to: " + destId + " from :" + this.localId);
                     rawSend(packet);
                 } catch (Exception e) {
                     throw new IOException("failed to sign or send", e);
@@ -195,7 +198,10 @@ public class APL {
                                 // deliver payload without control byte
                                 byte[] app = new byte[msg.payload.length - 1];
                                 System.arraycopy(msg.payload, 1, app, 0, app.length);
-                                listener.onMessage(msg.srcId, app);
+                                
+                                new Thread(() -> {
+                                    listener.onMessage(msg.srcId, app);
+                                }).start();
                             }
                         } else {
                             // duplicate: still acknowledge so sender can advance
