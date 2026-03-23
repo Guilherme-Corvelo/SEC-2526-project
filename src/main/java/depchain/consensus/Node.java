@@ -54,7 +54,7 @@ public class Node implements Serializable{
 
     public boolean canExtend(Node other){
         try {
-            return getParentLink() == extend(other);
+            return java.util.Arrays.equals(getParentLink(), extend(other));
         } catch (Exception e) {
             return false;
         } 
@@ -65,7 +65,8 @@ public class Node implements Serializable{
             if(msg.getjustify() == null){
                 return true;
             }
-            return getParentLink() == extend(msg.getjustify().getNode());
+            Debug.debug("BYTES: "+ java.util.Arrays.toString(extend(msg.getjustify().getNode())) +" "+ java.util.Arrays.toString(getParentLink()));
+            return java.util.Arrays.equals(getParentLink(), extend(msg.getjustify().getNode()));
         } catch (Exception e) {
             return false;
         } 
@@ -80,7 +81,7 @@ public class Node implements Serializable{
         
         Node other = (Node) obj;
         
-        if (this.parentLink == other.parentLink && this.action.equals(other.action)){
+        if (java.util.Arrays.equals(getParentLink(), other.getParentLink()) && this.action.equals(other.action)){
             return true;
         }
         return false;
@@ -89,6 +90,6 @@ public class Node implements Serializable{
     @Override
     public String toString() {
         return "Node[action=" + action + 
-            ", parentLink=" + (parentLink != null ? parentLink.toString() : "null") + "]";
+            ", parentLink=" + (parentLink != null ? java.util.Arrays.toString(getParentLink()) : "null") + "]";
     }
 }

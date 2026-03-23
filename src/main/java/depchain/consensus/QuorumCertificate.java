@@ -84,4 +84,10 @@ public class QuorumCertificate implements Serializable {
 
         return true;
     }
+
+    @Override
+    public String toString() {
+        return "QuorumCertificate[viewNumber=" + view + ", type=" + type +
+               ", node=" + node.toString() + ", treshsig=" + (tresholdSig) + "]";
+    }
 }
