@@ -19,6 +19,7 @@ public class DepchainAPI implements APLListener{
     private LinkedList<Integer> broadcastTo;
     private Set<Integer> receivedResponses = new HashSet<>();
     private int f;
+    private final Object lock = new Object();
 
     public DepchainAPI(int id, 
                     int port, Map<Integer, InetSocketAddress> addresses,
@@ -44,25 +45,38 @@ public class DepchainAPI implements APLListener{
 
     //TODO:THINK about new type for hotstuff response
     public void handleResponse(int senderId, Message Message){
-        receivedResponses.add(senderId);
-        Debug.debug("" + receivedResponses.size() + Message.toString());
+        synchronized(lock) {
+            receivedResponses.add(senderId);
+            Debug.debug("API RECEIVED: " + receivedResponses.size() + " " + Message.toString());
 
+            if (receivedResponses.size() >= this.f + 1) {
+                lock.notifyAll();
+            }
+        }
+        
     }
 
-    public void append(String action){
-        this.receivedResponses.clear();
+    public void append(String action) {
+        synchronized(lock) {
+            this.receivedResponses.clear();
 
-        Request request = new Request(action);
-        broadcast(request.serialize());
+            Request request = new Request(action);
+            broadcast(request.serialize());
 
-        //Maybe timeout?
-        while ((receivedResponses.size() < this.f + 1) ) { try {
-            wait(5*1000);
-        } catch (Exception e) {
-            // TODO: handle exception
-        }}
+            //Maybe timeout?
+            while ((receivedResponses.size() < this.f + 1) ) { 
+                try {
+                    lock.wait();
+                } catch (Exception e) {
+                    // TODO: handle exception
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
 
-        System.out.println( action + "was appended successfully");
+        }
+
+        System.out.println( action + " was appended successfully");
     }
 
     public void send(int receiverId, byte[] msg){

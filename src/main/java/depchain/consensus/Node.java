@@ -37,7 +37,7 @@ public class Node implements Serializable{
         if (prevNode.getParentLink() != null){
             md.update(prevNode.getParentLink());
         }
-        Debug.debug(prevNode.action);
+        //Debug.debug(prevNode.action);
         md.update(prevNode.action.getBytes());
         return  md.digest();
     }

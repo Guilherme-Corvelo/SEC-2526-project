@@ -50,14 +50,14 @@ public class HotStuffNode implements APLListener {
     public void onMessage(int senderId, byte[] payload){
         Message message = Message.deserialize(payload);
         if (message != null) {
-            Debug.debug( "At Node: " + getId() + "Sender ID : "+ senderId +  " received message : " + message.toString());
+            Debug.debug( "At Node: " + getId() + " Sender ID : "+ senderId +  " received message : " + message.toString());
             handleMessage(senderId, message);
             return;
         }
 
         Request request = Request.deserialize(payload);
         if (request != null) {
-            Debug.debug( "At Node: " + getId() + "Sender ID : "+ senderId +  " received message : " + request.toString());
+            Debug.debug( "At Node: " + getId() + " Sender ID : "+ senderId +  " received message : " + request.toString());
             handleRequest(senderId, request);
             return;
         }
@@ -65,12 +65,15 @@ public class HotStuffNode implements APLListener {
 
     //TODO:THINK about new type for hotstuff response
     public void handleRequest(int senderId, Request request){
-        Debug.debug( "At Node: " + getId() + " Handling request :" + request.toString());
+        //Debug.debug( "At Node: " + getId() + " Handling request :" + request.toString());
         Node requestNode = new Node(request.getData(), latestNode);
         //TODO:MAybe verification to extend?
+        
         Message NewViewMessage = new Message(Type.NEWVIEW, getView(), requestNode, senderId);
-        send(getLeaderId(), NewViewMessage.serialize());
+
         Debug.debug( "At Node: " + getId() + " Sent NewView message :" + NewViewMessage.toString() + "to leader: " + getLeaderId());
+        send(getLeaderId(), NewViewMessage.serialize());
+        
         if (getId() != getLeaderId()){ setPendingVoteType(Type.PREPARE);}
     }
 
@@ -120,6 +123,8 @@ public class HotStuffNode implements APLListener {
                 setPendingVoteType(Type.PREPARE);
                 getVotes().clear();
 
+                Debug.debug( "Leader: " + getId() + " Broadcast Prepare message :" + prepareMsg.toString());
+
                 broadcast(prepareMsg.serialize());
             }
         }
@@ -141,7 +146,8 @@ public class HotStuffNode implements APLListener {
 
                 setPendingVoteType(Type.PRECOMMIT);
                 getVotes().clear();
-                Debug.debug("Sent Combined Votes Message");
+                
+                Debug.debug( "Leader: " + getId() + " Broadcast PreCommit message :" + precommitMsg.toString());
                 broadcast(precommitMsg.serialize());
             }
         }
@@ -152,8 +158,11 @@ public class HotStuffNode implements APLListener {
                 setPrepareQC(msg.getjustify());
                 //TODO: Think aboiut teshdold signs
                 msg.Vote();
+
+                Debug.debug( "At Node: " + getId() + " Sent Prepare message :" + msg.toString() + " to leader: " + getLeaderId());
+                
                 send(getLeaderId(), msg.serialize());
-                Debug.debug( "At Node: " + getId() + " Sent Prepare message :" + msg.toString() + "to leader: " + getLeaderId());
+                
                 if (getId() != getLeaderId()){ setPendingVoteType(Type.PRECOMMIT);}
             }
 
@@ -161,37 +170,38 @@ public class HotStuffNode implements APLListener {
     }
 
     public void handlePrecommitMessage(int senderId, Message msg){
-        Debug.debug("Entered handle precommit node :" + getId());
+        //Debug.debug("Entered handle precommit node :" + getId());
         if (getId() == getLeaderId()){
             if (msg.getType() == getPendingVoteType() && msg.getPartialSign() != null){
                 getVotes().putIfAbsent(senderId, msg);
             }
             //add to votes
             if(enoughVotes()){
-                Message precommitMsg = new Message(Type.COMMIT, getView(), msg.getNode(), msg.getRequesterId());
+                Message commitMsg = new Message(Type.COMMIT, getView(), msg.getNode(), msg.getRequesterId());
 
                 QuorumCertificate highQC = new QuorumCertificate(Type.COMMIT, getView(), msg.getNode(), combineVotes());
-                precommitMsg.setJustify(highQC);
+                commitMsg.setJustify(highQC);
 
                 setPendingVoteType(Type.COMMIT);
                 getVotes().clear();
 
-                
-                broadcast(precommitMsg.serialize());
+                Debug.debug( "Leader: " + getId() + " Broadcast Commit message :" + commitMsg.toString());
+                broadcast(commitMsg.serialize());
             }
         }
         if(senderId == getLeaderId() && msg.getPartialSign() == null){
             
-            Debug.debug("Extend: " + msg.getNode().canExtend(msg) + " safe node: " + safeNode(msg.getNode(), msg.getjustify()));
-            Debug.debug("Entered if precommit node :" + getId());
+            //Debug.debug("Extend: " + msg.getNode().canExtend(msg) + " safe node: " + safeNode(msg.getNode(), msg.getjustify()));
+            //Debug.debug("Entered if precommit node :" + getId());
             setPrepareQC(msg.getjustify());
             //TODO: Think aboiut teshdold signs
             
             msg.Vote();
             setLockedQC(msg.getjustify());
-            send(getLeaderId(), msg.serialize());
-            Debug.debug( "At Node: " + getId() + " Sent Precommit message :" + msg.toString() + "to leader: " + getLeaderId());
 
+            Debug.debug( "At Node: " + getId() + " Sent Precommit message :" + msg.toString() + " to leader: " + getLeaderId());
+            send(getLeaderId(), msg.serialize());
+            
             if (getId() != getLeaderId()){ setPendingVoteType(Type.COMMIT);}
         
         }
@@ -206,21 +216,25 @@ public class HotStuffNode implements APLListener {
             if(enoughVotes()){
 
 
-                Message precommitMsg = new Message(Type.DECIDE, getView(), msg.getNode(), msg.getRequesterId());
+                Message decideMsg = new Message(Type.DECIDE, getView(), msg.getNode(), msg.getRequesterId());
 
                 QuorumCertificate highQC = new QuorumCertificate(Type.DECIDE, getView(), msg.getNode(), combineVotes());
-                precommitMsg.setJustify(highQC);
+                decideMsg.setJustify(highQC);
 
                 setPendingVoteType(Type.DECIDE);
                 getVotes().clear();
-                broadcast(precommitMsg.serialize());
+
+                Debug.debug( "Leader: " + getId() + " Broadcast Decide message :" + decideMsg.toString());
+
+                broadcast(decideMsg.serialize());
             }
         }
         if(senderId == getLeaderId() && msg.getPartialSign() == null){
             //TODO: Think aboiut teshdold signs
             msg.Vote();
-            send(getLeaderId(), msg.serialize());
-            Debug.debug( "At Node: " + getId() + " Sent Commit message :" + msg.toString() + "to leader: " + getLeaderId());
+
+            Debug.debug( "At Node: " + getId() + " Sent Commit message :" + msg.toString() + " to leader: " + getLeaderId());
+            send(getLeaderId(), msg.serialize());           
 
             if (getId() != getLeaderId()){ setPendingVoteType(Type.DECIDE);}
 
@@ -231,8 +245,10 @@ public class HotStuffNode implements APLListener {
     public void handleDecideMessage(int senderId, Message msg){
         //TODO: Think aboiut teshdold signs
         latestNode = msg.getNode();
-        send(msg.getRequesterId(), msg.serialize());
-        Debug.debug( "At Node: " + getId() + " Sent Decide message :" + msg.toString() + "to leader: " + getLeaderId());
+
+        Debug.debug( "At Node: " + getId() + " Sent Decide message :" + msg.toString() + "to client " + msg.getRequesterId());
+
+        send(msg.getRequesterId(), msg.serialize());        
 
         if (getId() != getLeaderId()){ setPendingVoteType(Type.NEWVIEW);}
     }
@@ -250,7 +266,7 @@ public class HotStuffNode implements APLListener {
     private byte[] combineVotes(){
         String combined = "";
         for (Message m : getVotes().values()){
-            Debug.debug(m.toString());
+            //Debug.debug(m.toString());
             combined += m.getPartialSign();
         }
         
@@ -297,7 +313,7 @@ public class HotStuffNode implements APLListener {
 
     public void send(int receiverId, byte[] msg){
         try {
-            Debug.debug("At Node: " + getId() + "Sending : " + msg.toString() + " to " + getLeaderId());
+            //Debug.debug("At Node: " + getId() + "Sending : " + msg.toString() + " to " + getLeaderId());
             apl.send(receiverId, msg);
         } catch (Exception e) {
             System.err.print(e.getMessage());

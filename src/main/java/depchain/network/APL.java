@@ -114,7 +114,7 @@ public class APL {
                             new DatagramPacket(wire, wire.length, dst.getAddress(), dst.getPort());
                     // record last transmission time for RTT estimation
                     sendTimestamp.put(destId, System.currentTimeMillis());
-                    Debug.debug("APL SENT: " + packet.toString() + " to: " + destId + " from :" + this.localId);
+                    //Debug.debug("APL SENT: " + packet.toString() + " to: " + destId + " from :" + this.localId);
                     rawSend(packet);
                 } catch (Exception e) {
                     throw new IOException("failed to sign or send", e);
