@@ -2,12 +2,12 @@ package depchain.consensus;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-
-import depchain.Debug;
-
+import java.util.Arrays;
+import java.util.HexFormat;
 import java.io.Serializable;
 import java.lang.String;
-import java.nio.charset.StandardCharsets;
+
+import depchain.Debug;
 
 public class Node implements Serializable{
     private byte[] parentLink;
@@ -38,9 +38,7 @@ public class Node implements Serializable{
             md.update(prevNode.getParentLink());
         }
         Debug.debug(prevNode.action);
-        //TODO: BYTES are fucked, do claude search for byte equals bytes are cooked prints of bytes are cooked
-        Debug.debug("BBBBBBBBBBBBBBBB" + java.util.Arrays.toString(prevNode.getAction().getBytes(StandardCharsets.UTF_8)));
-        md.update(prevNode.action.getBytes(StandardCharsets.UTF_8));
+        md.update(prevNode.action.getBytes());
         return  md.digest();
     }
 
@@ -54,7 +52,7 @@ public class Node implements Serializable{
 
     public boolean canExtend(Node other){
         try {
-            return java.util.Arrays.equals(getParentLink(), extend(other));
+            return Arrays.equals(getParentLink(), extend(other));
         } catch (Exception e) {
             return false;
         } 
@@ -65,8 +63,7 @@ public class Node implements Serializable{
             if(msg.getjustify() == null){
                 return true;
             }
-            Debug.debug("BYTES: "+ java.util.Arrays.toString(extend(msg.getjustify().getNode())) +" "+ java.util.Arrays.toString(getParentLink()));
-            return java.util.Arrays.equals(getParentLink(), extend(msg.getjustify().getNode()));
+            return Arrays.equals(getParentLink(), extend(msg.getjustify().getNode()));
         } catch (Exception e) {
             return false;
         } 
@@ -80,16 +77,12 @@ public class Node implements Serializable{
         }
         
         Node other = (Node) obj;
-        
-        if (java.util.Arrays.equals(getParentLink(), other.getParentLink()) && this.action.equals(other.action)){
-            return true;
-        }
-        return false;
+        return Arrays.equals(getParentLink(), other.getParentLink()) && this.action.equals(other.action);
     }
 
     @Override
     public String toString() {
         return "Node[action=" + action + 
-            ", parentLink=" + (parentLink != null ? java.util.Arrays.toString(getParentLink()) : "null") + "]";
+            ", parentLink=" + (parentLink != null ? HexFormat.of().formatHex(getParentLink()) : "null") + "]";
     }
 }

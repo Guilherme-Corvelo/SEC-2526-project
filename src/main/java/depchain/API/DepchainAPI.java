@@ -34,11 +34,10 @@ public class DepchainAPI implements APLListener{
     }
 
     public void onMessage(int senderId, byte[] payload){
+        Debug.debug( "Client Received Message");
         Message message = Message.deserialize(payload);
         if (message != null) {
-            Debug.debug( "Sender ID : "+ senderId +  "received message : " + message.toString());
             handleResponse(senderId, message);
-
             return;
         }
     }
@@ -46,6 +45,8 @@ public class DepchainAPI implements APLListener{
     //TODO:THINK about new type for hotstuff response
     public void handleResponse(int senderId, Message Message){
         receivedResponses.add(senderId);
+        Debug.debug("" + receivedResponses.size() + Message.toString());
+
     }
 
     public void append(String action){
@@ -55,7 +56,11 @@ public class DepchainAPI implements APLListener{
         broadcast(request.serialize());
 
         //Maybe timeout?
-        while ((receivedResponses.size() < this.f + 1) ) {}
+        while ((receivedResponses.size() < this.f + 1) ) { try {
+            wait(5*1000);
+        } catch (Exception e) {
+            // TODO: handle exception
+        }}
 
         System.out.println( action + "was appended successfully");
     }

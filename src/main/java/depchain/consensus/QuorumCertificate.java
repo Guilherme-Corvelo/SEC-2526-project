@@ -1,6 +1,7 @@
 package depchain.consensus;
 
 import java.io.Serializable;
+import java.util.HexFormat;
 /**
  * ByzantineQuorumCertificate: A Byzantine-fault-tolerant quorum certificate.
  * 
@@ -87,7 +88,7 @@ public class QuorumCertificate implements Serializable {
 
     @Override
     public String toString() {
-        return "QuorumCertificate[viewNumber=" + view + ", type=" + type +
-               ", node=" + node.toString() + ", treshsig=" + (tresholdSig) + "]";
+        return "QuorumCertificate[viewNumber=" + getView() + ", type=" + getType() +
+               ", node=" + getNode().toString() + ", treshsig=" + HexFormat.of().formatHex(getSignature())+ "]";
     }
 }

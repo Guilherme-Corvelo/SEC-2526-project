@@ -74,7 +74,7 @@ public class HotStuffNode implements APLListener {
         if (getId() != getLeaderId()){ setPendingVoteType(Type.PREPARE);}
     }
 
-    public void handleMessage(int senderId, Message msg){
+    public synchronized void handleMessage(int senderId, Message msg){
         if (msg.getView() != getView()) {
             return;
         }
