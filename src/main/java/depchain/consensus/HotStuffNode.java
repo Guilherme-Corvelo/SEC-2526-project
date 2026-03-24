@@ -81,7 +81,7 @@ public class HotStuffNode implements APLListener {
         if (getId() != getLeaderId()){ 
             setPendingVoteType(Type.PREPARE);
         }
-        startViewTimer();
+        startViewTimer(NewViewMessage);
     }
 
     public synchronized void handleMessage(int senderId, Message msg){
@@ -164,16 +164,18 @@ public class HotStuffNode implements APLListener {
             if (msg.getNode().canExtend(msg) &&
                 safeNode(msg.getNode(), msg.getjustify())){
 
-                setPrepareQC(msg.getjustify());
-                //TODO: Think aboiut teshdold signs
-                msg.Vote();
+                if (validateQC(msg.getjustify())) {
+                    setPrepareQC(msg.getjustify());
+                    //TODO: Think aboiut teshdold signs
+                    msg.Vote();
 
-                Debug.debug( "At Node: " + getId() + " Sent Prepare message :" + msg.toString() + " to leader: " + getLeaderId());
-                
-                send(getLeaderId(), msg.serialize());
-                
-                if (getId() != getLeaderId()){ setPendingVoteType(Type.PRECOMMIT);}
-                startViewTimer();
+                    Debug.debug( "At Node: " + getId() + " Sent Prepare message :" + msg.toString() + " to leader: " + getLeaderId());
+                    
+                    send(getLeaderId(), msg.serialize());
+                    
+                    if (getId() != getLeaderId()){ setPendingVoteType(Type.PRECOMMIT);}
+                    startViewTimer(msg);
+                }                
             }
         }
     }
@@ -202,17 +204,20 @@ public class HotStuffNode implements APLListener {
             
             //Debug.debug("Extend: " + msg.getNode().canExtend(msg) + " safe node: " + safeNode(msg.getNode(), msg.getjustify()));
             //Debug.debug("Entered if precommit node :" + getId());
-            setPrepareQC(msg.getjustify());
-            //TODO: Think aboiut teshdold signs
-            
-            msg.Vote();
-            setLockedQC(msg.getjustify());
+            if (validateQC(msg.getjustify())) {
+                setPrepareQC(msg.getjustify());
+                //TODO: Think aboiut teshdold signs
+                
+                msg.Vote();
+                setLockedQC(msg.getjustify());
 
-            Debug.debug( "At Node: " + getId() + " Sent Precommit message :" + msg.toString() + " to leader: " + getLeaderId());
-            send(getLeaderId(), msg.serialize());
+                Debug.debug( "At Node: " + getId() + " Sent Precommit message :" + msg.toString() + " to leader: " + getLeaderId());
+                send(getLeaderId(), msg.serialize());
+                
+                if (getId() != getLeaderId()){ setPendingVoteType(Type.COMMIT);}
+                startViewTimer(msg);
+            }
             
-            if (getId() != getLeaderId()){ setPendingVoteType(Type.COMMIT);}
-            startViewTimer();
         }
     }
 
@@ -240,19 +245,22 @@ public class HotStuffNode implements APLListener {
         }
         if(senderId == getLeaderId() && msg.getPartialSign() == null){
             //TODO: Think aboiut teshdold signs
-            msg.Vote();
+            if (validateQC(msg.getjustify())) {
+                msg.Vote();
 
-            Debug.debug( "At Node: " + getId() + " Sent Commit message :" + msg.toString() + " to leader: " + getLeaderId());
-            send(getLeaderId(), msg.serialize());           
+                Debug.debug( "At Node: " + getId() + " Sent Commit message :" + msg.toString() + " to leader: " + getLeaderId());
+                send(getLeaderId(), msg.serialize());           
 
-            if (getId() != getLeaderId()){ setPendingVoteType(Type.DECIDE);}
-            startViewTimer();
+                if (getId() != getLeaderId()){ setPendingVoteType(Type.DECIDE);}
+                startViewTimer(msg);
+            }            
         }
 
     }
 
     public void handleDecideMessage(int senderId, Message msg){
         //TODO: Think aboiut teshdold signs
+        //TODO: (VALIDATE QC???)
         latestNode = msg.getNode();
 
         Debug.debug( "At Node: " + getId() + " Sent Decide message :" + msg.toString() + "to client " + msg.getRequesterId());
@@ -286,7 +294,7 @@ public class HotStuffNode implements APLListener {
         return getVotes().size() >= n - f;
     }
 
-    private synchronized void startViewTimer() {
+    private synchronized void startViewTimer(Message lastMessage) {
         Debug.debug("New timer started for node " + getId());
 
         int timedOutView = this.view;
@@ -297,7 +305,7 @@ public class HotStuffNode implements APLListener {
                 Thread.sleep(TIMEOUT_MS);
                 synchronized (this) {
                     if (!timerCancelled && this.view == timedOutView) {
-                        onViewTimeout();
+                        onViewTimeout(lastMessage);
                     }
                 }
             } catch (InterruptedException e) {
@@ -316,7 +324,7 @@ public class HotStuffNode implements APLListener {
         }
     }
 
-    private void onViewTimeout() {
+    private void onViewTimeout(Message lastMessage) {
         Debug.debug("Node " + getId() + " timed out in view " + view +
                     ". Leader " + getLeaderId() + " suspected. Moving to view " + (view + 1));
 
@@ -324,13 +332,13 @@ public class HotStuffNode implements APLListener {
         this.votes.clear();
         this.pendingVoteType = Type.NEWVIEW;
 
-        Message newViewMsg = new Message(Type.NEWVIEW, getView(), latestNode, -1);
+        Message newViewMsg = new Message(Type.NEWVIEW, getView(), latestNode, lastMessage.getRequesterId());
         newViewMsg.setJustify(prepareQC);
 
         Debug.debug("Node " + getId() + " sending new-view to new leader " + getLeaderId());
         send(getLeaderId(), newViewMsg.serialize());
 
-        startViewTimer();
+        startViewTimer(newViewMsg);
     }
 
     public QuorumCertificate getHighQC(){
@@ -342,6 +350,12 @@ public class HotStuffNode implements APLListener {
         }
         return highestView.getjustify();
     }
+
+    public boolean validateQC(QuorumCertificate qc) {
+        //TODO Implement it when threshold sig exists
+        return true;
+    }
+
 
     public QuorumCertificate getPrepareQC(){
         return this.prepareQC;
