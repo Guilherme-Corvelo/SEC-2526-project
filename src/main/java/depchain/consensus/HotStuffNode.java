@@ -33,6 +33,10 @@ public class HotStuffNode implements APLListener {
     private int n;
     private Type pendingVoteType = Type.NEWVIEW;
     private ConcurrentHashMap<Integer, Message> votes = new ConcurrentHashMap<>();
+    
+    private Thread viewTimerThread = null;
+    private boolean timerCancelled = false;
+    private static final long TIMEOUT_MS = 5000;
 
     public HotStuffNode(int id, 
                     int port, Map<Integer, InetSocketAddress> addresses,
@@ -74,12 +78,19 @@ public class HotStuffNode implements APLListener {
         Debug.debug( "At Node: " + getId() + " Sent NewView message :" + NewViewMessage.toString() + "to leader: " + getLeaderId());
         send(getLeaderId(), NewViewMessage.serialize());
         
-        if (getId() != getLeaderId()){ setPendingVoteType(Type.PREPARE);}
+        if (getId() != getLeaderId()){ 
+            setPendingVoteType(Type.PREPARE);
+        }
+        startViewTimer();
     }
 
     public synchronized void handleMessage(int senderId, Message msg){
         if (msg.getView() != getView()) {
             return;
+        }
+
+        if(senderId==getLeaderId()){
+            cancelViewTimer();
         }
         
         switch (msg.getType()) {
@@ -137,8 +148,6 @@ public class HotStuffNode implements APLListener {
             }
             //add to votes
             if(enoughVotes()){
-
-
                 Message precommitMsg = new Message(Type.PRECOMMIT, getView(), msg.getNode(), msg.getRequesterId());
 
                 QuorumCertificate highQC = new QuorumCertificate(Type.PRECOMMIT, getView(), msg.getNode(), combineVotes());
@@ -164,8 +173,8 @@ public class HotStuffNode implements APLListener {
                 send(getLeaderId(), msg.serialize());
                 
                 if (getId() != getLeaderId()){ setPendingVoteType(Type.PRECOMMIT);}
+                startViewTimer();
             }
-
         }
     }
 
@@ -203,7 +212,7 @@ public class HotStuffNode implements APLListener {
             send(getLeaderId(), msg.serialize());
             
             if (getId() != getLeaderId()){ setPendingVoteType(Type.COMMIT);}
-        
+            startViewTimer();
         }
     }
 
@@ -237,7 +246,7 @@ public class HotStuffNode implements APLListener {
             send(getLeaderId(), msg.serialize());           
 
             if (getId() != getLeaderId()){ setPendingVoteType(Type.DECIDE);}
-
+            startViewTimer();
         }
 
     }
@@ -253,7 +262,7 @@ public class HotStuffNode implements APLListener {
         if (getId() != getLeaderId()){ setPendingVoteType(Type.NEWVIEW);}
     }
 
-    //Think about quorum certificate not starting at null, having qc initialized with genesis ndoe
+    //Think about quorum certificate not starting at null, having qc initialized with genesis node
     private boolean safeNode(Node node, QuorumCertificate qc){
         return getLockedQC() == null || node.canExtend(getLockedQC().getNode()) || qc.getView() > getLockedQC().getView();
     }
@@ -275,6 +284,53 @@ public class HotStuffNode implements APLListener {
 
     private boolean enoughVotes(){
         return getVotes().size() >= n - f;
+    }
+
+    private synchronized void startViewTimer() {
+        Debug.debug("New timer started for node " + getId());
+
+        int timedOutView = this.view;
+        this.timerCancelled = false;
+
+        this.viewTimerThread = new Thread(() -> {
+            try {
+                Thread.sleep(TIMEOUT_MS);
+                synchronized (this) {
+                    if (!timerCancelled && this.view == timedOutView) {
+                        onViewTimeout();
+                    }
+                }
+            } catch (InterruptedException e) {
+                // do nothing
+            }
+        });
+        this.viewTimerThread.setDaemon(true);
+        this.viewTimerThread.start();
+    }
+
+    private synchronized void cancelViewTimer() {
+        this.timerCancelled = true;
+        if (this.viewTimerThread != null && this.viewTimerThread.isAlive()) {
+            this.viewTimerThread.interrupt();
+            this.viewTimerThread = null;
+        }
+    }
+
+    private void onViewTimeout() {
+        Debug.debug("Node " + getId() + " timed out in view " + view +
+                    ". Leader " + getLeaderId() + " suspected. Moving to view " + (view + 1));
+
+        this.view++;
+        this.votes.clear();
+        this.pendingVoteType = Type.NEWVIEW;
+
+        Message newViewMsg = new Message(Type.NEWVIEW, getView(), latestNode, -1);
+        newViewMsg.setJustify(prepareQC);
+
+        Debug.debug("Node " + getId() + " sending new-view to new leader " + getLeaderId());
+        send(getLeaderId(), newViewMsg.serialize());
+
+        startViewTimer();
     }
 
     public QuorumCertificate getHighQC(){
