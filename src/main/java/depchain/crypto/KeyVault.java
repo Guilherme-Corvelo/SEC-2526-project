@@ -130,4 +130,11 @@ public class KeyVault {
 
         return keys;
     }
+
+    public static PublicKey recreatePublicKey(byte[] publicKeyBytes) throws Exception {
+        X509EncodedKeySpec spec = new X509EncodedKeySpec(publicKeyBytes);
+        KeyFactory factory = KeyFactory.getInstance(ALGORITHM);
+
+        return factory.generatePublic(spec);
+    }
 }

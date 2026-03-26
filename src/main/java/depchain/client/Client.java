@@ -2,6 +2,7 @@ package depchain.client;
 
 import depchain.Debug;
 import depchain.API.DepchainAPI;
+import depchain.blockchain.Transaction;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -22,6 +23,13 @@ public class Client{
     public void send(String action){
         Debug.debug("Client Sent request to append" + action);
         depchain.append(action);
+        Debug.debug("Client received response");
+    }
+
+    public void send(Transaction transaction){
+        Debug.debug("Client Sent transaction");
+        //TODO: API NEEDS TO RECEIVE TRANSACTION
+        //depchain.append(transaction);
         Debug.debug("Client received response");
     }
 }

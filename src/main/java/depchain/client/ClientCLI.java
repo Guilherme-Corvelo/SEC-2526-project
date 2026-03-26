@@ -3,7 +3,11 @@ package depchain.client;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
+
+import org.hyperledger.besu.evm.operation.ExtStaticCallOperation;
+
 import depchain.crypto.KeyVault;
+import depchain.blockchain.Transaction;
 import java.security.*;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
@@ -19,7 +23,6 @@ public class ClientCLI {
     static final String ID_INCREASE_ALLOWANCE = "39509351";
     static final String ID_DECREASE_ALLOWANCE = "a457c2d7";
 
-    //TODO: HARDCORE CONFIG
     private static final String IST_COIN_ADDRESS = "1234567891234567891234567891234567891234";
     private static final int F = 1;
  
@@ -44,8 +47,6 @@ public class ClientCLI {
     private long nonce;
     private long defaultGasPrice = 1;
     private long defaultGasLimit = 100_000;
-
-    //TODO: Create Transaction builders
 
     public ClientCLI(String myAddress, PrivateKey privateKey, PublicKey publicKey, String istCoinAddress,
                      long initialNonce, Client client) {
@@ -162,16 +163,17 @@ public class ClientCLI {
 
     }
 
-    private void handleDepCoinTransfer(String[] parts) {
+    private void handleDepCoinTransfer(String[] parts) throws Exception {
         String to = parts[2];
         long amount = parseLong(parts[3], "amount");
 
-        // TODO: Create Transaction
+        Transaction transaction = buildDepCoinTransfer(to, amount);
+        submit(transaction);
 
         System.out.println("DepCoin transfer submitted.");
         System.out.println("  To:     " + to);
         System.out.println("  Amount: " + amount);
-        //TODO System.out.println("  From:   " + myAddress);
+        System.out.println("  From:   " + myAddress);
     }
 
     private void handleIST(String command, String[] parts) throws Exception {
@@ -222,21 +224,19 @@ public class ClientCLI {
         }
     }
 
-    private void handleISTTransfer(String[] parts) {
+    private void handleISTTransfer(String[] parts) throws Exception {
         String to = parts[2];
         BigInteger amount = parseBigInt(parts[3], "amount");
 
-        //TODO: Contract
-        //submit(buildContractCall(ID_TRANSFER + padAddress(to) + padUint256(amount)));
+        submit(buildContractCall(ID_TRANSFER + padAddress(to) + padUint256(amount)));
         System.out.println("IST transfer submitted -> to: " + to + "  amount: " + amount);
     }
 
-    private void handleISTApprove(String[] parts) {
+    private void handleISTApprove(String[] parts) throws Exception {
         String spender    = parts[2];
         BigInteger amount = parseBigInt(parts[3], "amount");
 
-        //TODO: Contract
-        //submit(buildContractCall(ID_APPROVE + padAddress(spender) + padUint256(amount)));
+        submit(buildContractCall(ID_APPROVE + padAddress(spender) + padUint256(amount)));
         System.out.println("IST approve submitted -> spender: " + spender + "  amount: " + amount);
         if (amount.compareTo(BigInteger.ZERO) != 0) {
             System.out.println("  Warning: only safe if current allowance is 0.");
@@ -244,49 +244,43 @@ public class ClientCLI {
         }
     }
 
-    private void handleISTIncreaseAllowance(String[] parts) {
+    private void handleISTIncreaseAllowance(String[] parts) throws Exception {
         String spender = parts[2];
         BigInteger amount = parseBigInt(parts[3], "amount");
 
-        //TODO: Contract
-        //submit(buildContractCall(ID_INCREASE_ALLOWANCE + padAddress(spender) + padUint256(amount)));
+        submit(buildContractCall(ID_INCREASE_ALLOWANCE + padAddress(spender) + padUint256(amount)));
         System.out.println("IST increaseAllowance submitted -> spender: " + spender + "  added: " + amount);
     }
 
-    private void handleISTDecreaseAllowance(String[] parts) {
+    private void handleISTDecreaseAllowance(String[] parts) throws Exception {
         String spender = parts[2];
         BigInteger amount = parseBigInt(parts[3], "amount");
 
-        //TODO: Contract
-        //submit(buildContractCall(ID_DECREASE_ALLOWANCE + padAddress(spender) + padUint256(amount)));
+        submit(buildContractCall(ID_DECREASE_ALLOWANCE + padAddress(spender) + padUint256(amount)));
         System.out.println("IST decreaseAllowance submitted -> spender: " + spender + "  removed: " + amount);
     }
 
-    private void handleISTTransferFrom(String[] parts) {
+    private void handleISTTransferFrom(String[] parts) throws Exception {
         String from = parts[2];
         String to = parts[3];
         BigInteger amount = parseBigInt(parts[4], "amount");
 
-        //TODO: Contract
-        //submit(buildContractCall(ID_TRANSFER_FROM + padAddress(from) + padAddress(to) + padUint256(amount)));
+        submit(buildContractCall(ID_TRANSFER_FROM + padAddress(from) + padAddress(to) + padUint256(amount)));
         System.out.println("IST transferFrom submitted -> from: " + from + "  to: " + to + "  amount: " + amount);
     }
 
-    private void handleISTBalance(String[] parts) {
-        //TODO: Contract
-        //submit(buildContractCall(ID_BALANCE_OF + padAddress(parts[2])));
+    private void handleISTBalance(String[] parts) throws Exception {
+        submit(buildContractCall(ID_BALANCE_OF + padAddress(parts[2])));
         System.out.println("IST balanceOf query submitted for: " + parts[2]);
     }
 
-    private void handleISTAllowance(String[] parts) {
-        //TODO: Contract
-        //submit(buildContractCall(ID_ALLOWANCE + padAddress(parts[2]) + padAddress(parts[3])));
+    private void handleISTAllowance(String[] parts) throws Exception {
+        submit(buildContractCall(ID_ALLOWANCE + padAddress(parts[2]) + padAddress(parts[3])));
         System.out.println("IST allowance query submitted -> owner: " + parts[2] + "  spender: " + parts[3]);
     }
 
-    private void handleISTTotalSupply() {
-        //TODO: Contract
-        //submit(buildContractCall(ID_TOTAL_SUPPLY));
+    private void handleISTTotalSupply() throws Exception {
+        submit(buildContractCall(ID_TOTAL_SUPPLY));
         System.out.println("IST totalSupply query submitted.");
     }
 
@@ -344,6 +338,28 @@ public class ClientCLI {
             throw new IllegalArgumentException("Usage: " + usage);
     }
 
+    private static PrivateKey loadPrivateKey(int clientId) throws Exception {
+        return KeyVault.loadPrivateKey("client" + clientId);
+    }
+
+    private static Map<Integer, PublicKey> loadAllPublicKeys() throws Exception {
+        return KeyVault.loadAllPublicKeys();
+    }
+
+    private Transaction buildDepCoinTransfer(String to, long amount) {
+        return new Transaction();
+    }
+
+    private Transaction buildContractCall(String callData) {
+        return new Transaction();
+    }
+
+    private void submit(Transaction transaction) throws Exception{
+        transaction.sign(privateKey);
+        client.send(transaction);
+        nonce++;
+    }
+
     private String padAddress(String address) {
         String hex = address.startsWith("0x") ? address.substring(2) : address;
         return "0".repeat(64 - hex.length()) + hex;
@@ -351,14 +367,6 @@ public class ClientCLI {
  
     private String padUint256(BigInteger value) {
         return String.format("%064x", value);
-    }
-
-    private static PrivateKey loadPrivateKey(int clientId) throws Exception {
-        return KeyVault.loadPrivateKey("client" + clientId);
-    }
-
-    private static Map<Integer, PublicKey> loadAllPublicKeys() throws Exception {
-        return KeyVault.loadAllPublicKeys();
     }
 
     private void printHelp() {
