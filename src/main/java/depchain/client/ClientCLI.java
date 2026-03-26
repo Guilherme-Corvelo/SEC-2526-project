@@ -1,10 +1,12 @@
 package depchain.client;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 import depchain.crypto.KeyVault;
 import java.security.*;
 import java.math.BigInteger;
+import java.net.InetSocketAddress;
 
 public class ClientCLI {
 
@@ -18,21 +20,42 @@ public class ClientCLI {
     static final String ID_DECREASE_ALLOWANCE = "a457c2d7";
 
     //TODO: HARDCORE CONFIG
-
+    private static final String IST_COIN_ADDRESS = "1234567891234567891234567891234567891234";
+    private static final int F = 1;
+ 
+    private static final Map<Integer, InetSocketAddress> SERVER_ADDRESSES = new HashMap<>() {{
+        put(3, new InetSocketAddress("localhost", 20003));
+        put(4, new InetSocketAddress("localhost", 20004));
+        put(5, new InetSocketAddress("localhost", 20005));
+        put(6, new InetSocketAddress("localhost", 20006));
+    }};
+ 
+    private static final Map<Integer, String> CLIENT_ACCOUNTS_ADDRESSES = new HashMap<>() {{
+        put(0, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        put(1, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        put(2, "cccccccccccccccccccccccccccccccccccccccc");
+    }};
+    
+    private final String myAddress;
     private final PrivateKey privateKey;
     private final PublicKey publicKey;
-
-    //TODO: Create Transaction builders
-    //TODO: Think about key vault, server_addresses and client_addresses
-
-    //private final String myAddress;
+    private final String istCoinAddress;
+    private final Client client;
+    private long nonce;
     private long defaultGasPrice = 1;
     private long defaultGasLimit = 100_000;
 
-    //TODO: Create Constructor correctly
-    public ClientCLI(PrivateKey privateKey, PublicKey publicKey) {
+    //TODO: Create Transaction builders
+
+    public ClientCLI(String myAddress, PrivateKey privateKey, PublicKey publicKey, String istCoinAddress,
+                     long initialNonce, Client client) {
+    
+        this.myAddress = myAddress;
         this.privateKey = privateKey;
         this.publicKey = publicKey;
+        this.istCoinAddress = istCoinAddress;
+        this.nonce = initialNonce;
+        this.client = client;
     }
 
     public static void main(String[] args) throws Exception {
@@ -59,12 +82,14 @@ public class ClientCLI {
         PrivateKey privateKey = loadPrivateKey(clientId);
         Map<Integer, PublicKey> publicKeys = loadAllPublicKeys();
 
-        //TODO: Get my own address?
+        String myAddress = CLIENT_ACCOUNTS_ADDRESSES.get(clientId);
+        if (myAddress == null) {
+            System.err.println("Unknown clientId: " + clientId);
+            System.exit(1);
+        }
 
-        //TODO: Create a new Client
-
-        //TODO: Create Constructor correctly
-        ClientCLI cli = new ClientCLI(privateKey, publicKeys.get(clientId));
+        Client client = new Client(clientId, clientPort, SERVER_ADDRESSES, privateKey, publicKeys, F);
+        ClientCLI cli = new ClientCLI(myAddress, privateKey, publicKeys.get(clientId), IST_COIN_ADDRESS, 0, client);
 
         cli.run();
     }
