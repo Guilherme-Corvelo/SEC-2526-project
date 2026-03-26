@@ -9,7 +9,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Set;
 
 import com.weavechain.curve25519.Scalar;
-import com.weavechain.sig.ThresholdSigEd25519;
+//import com.weavechain.sig.ThresholdSigEd25519;
 
 import depchain.network.APL;
 
@@ -30,7 +30,7 @@ public class Message implements Serializable{
         this.requesterId = requesterId;
     }
 
-    public Scalar replicaComputeRi(Scalar privateShare, ThresholdSigEd25519 sigHelper , APL apl){
+    /* public Scalar replicaComputeRi(Scalar privateShare, ThresholdSigEd25519 sigHelper , APL apl){
         try {
             Scalar Ri = sigHelper.computeRi(privateShare, node.getAction());
             return Ri;
@@ -39,7 +39,7 @@ public class Message implements Serializable{
             System.err.print("Library bad!");
         }
         return null;        
-    }
+    } */
 
     /* 
     public void Vote(int myIndex, Scalar privateShare, Scalar Ri, Scalar k, Set<Integer> nodes, ThresholdSigEd25519 sigHelper) {

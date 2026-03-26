@@ -1,6 +1,9 @@
 package depchain.client;
 
+import java.util.Map;
 import java.util.Scanner;
+import depchain.crypto.KeyVault;
+import java.security.*;
 import java.math.BigInteger;
 
 public class ClientCLI {
@@ -15,6 +18,10 @@ public class ClientCLI {
     static final String ID_DECREASE_ALLOWANCE = "a457c2d7";
 
     //TODO: HARDCORE CONFIG
+
+    private final PrivateKey privateKey;
+    private final PublicKey publicKey;
+
     //TODO: Create Transaction builders
     //TODO: Think about key vault, server_addresses and client_addresses
 
@@ -23,15 +30,17 @@ public class ClientCLI {
     private long defaultGasLimit = 100_000;
 
     //TODO: Create Constructor correctly
-    public ClientCLI() {
-
+    public ClientCLI(PrivateKey privateKey, PublicKey publicKey) {
+        this.privateKey = privateKey;
+        this.publicKey = publicKey;
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
 
         if (args.length < 2) {
             System.err.println("Usage ClientCLI <clientId> <clientPort>");
             System.err.println("Example: ClientCLI 1 20000");
+            System.exit(1);
         }
 
         int clientId   = Integer.parseInt(args[0]);
@@ -41,14 +50,21 @@ public class ClientCLI {
         System.out.println("  Client ID:   " + clientId);
         System.out.println("  Client Port: " + clientPort);
 
-        //TODO: Get private key and all publics
+        if (!KeyVault.keysExist()) {
+            System.err.println("The keys do not exist yet. Run KeyVault.java to generate all client and server keys.");
+            System.err.println("mvn exec:java -Dexec.mainClass=\"depchain.crypto.KeyVault\"");
+            System.exit(1);
+        }
+
+        PrivateKey privateKey = loadPrivateKey(clientId);
+        Map<Integer, PublicKey> publicKeys = loadAllPublicKeys();
 
         //TODO: Get my own address?
 
         //TODO: Create a new Client
 
         //TODO: Create Constructor correctly
-        ClientCLI cli = new ClientCLI();
+        ClientCLI cli = new ClientCLI(privateKey, publicKeys.get(clientId));
 
         cli.run();
     }
@@ -310,6 +326,14 @@ public class ClientCLI {
  
     private String padUint256(BigInteger value) {
         return String.format("%064x", value);
+    }
+
+    private static PrivateKey loadPrivateKey(int clientId) throws Exception {
+        return KeyVault.loadPrivateKey("client" + clientId);
+    }
+
+    private static Map<Integer, PublicKey> loadAllPublicKeys() throws Exception {
+        return KeyVault.loadAllPublicKeys();
     }
 
     private void printHelp() {
