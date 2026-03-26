@@ -39,7 +39,7 @@ public class Transaction implements Serializable{
 
 
     public void sign(PrivateKey privateKey) throws Exception {
-        Signature sig = Signature.getInstance("SHA256withECDSA");
+        Signature sig = Signature.getInstance("SHA256withRSA");
         sig.initSign(privateKey);
         sig.update(getSignableBytes());
         this.signature = sig.sign();
@@ -59,7 +59,7 @@ public class Transaction implements Serializable{
         }
 
         try {
-            Signature sig = Signature.getInstance("SHA256withECDSA");
+            Signature sig = Signature.getInstance("SHA256withRSA");
             sig.initVerify(KeyVault.recreatePublicKey(senderPublicKeyBytes));
             sig.update(getSignableBytes());
             return sig.verify(signature);

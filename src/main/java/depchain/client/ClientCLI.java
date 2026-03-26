@@ -122,7 +122,7 @@ public class ClientCLI {
                 switch (type) {
                     case "exit":
                         scanner.close();
-                        return;               
+                        System.exit(0);              
                     case "help":
                         printHelp();
                         break;
@@ -347,11 +347,11 @@ public class ClientCLI {
     }
 
     private Transaction buildDepCoinTransfer(String to, long amount) {
-        return new Transaction();
+        return new Transaction(myAddress, to, null, amount, nonce, defaultGasPrice, defaultGasLimit, publicKey);
     }
 
     private Transaction buildContractCall(String callData) {
-        return new Transaction();
+        return new Transaction(myAddress, istCoinAddress, callData, 0, nonce, defaultGasPrice, defaultGasLimit, publicKey);
     }
 
     private void submit(Transaction transaction) throws Exception{
