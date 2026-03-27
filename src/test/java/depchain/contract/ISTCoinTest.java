@@ -332,6 +332,7 @@ public class ISTCoinTest {
         executor.sender(sender);
         executor.callData(Bytes.fromHexString(callDataHex));
         executor.execute();
+
         return extractBigIntegerFromReturnData(byteArrayOutputStream);
     }
     

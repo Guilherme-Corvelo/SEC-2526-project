@@ -49,6 +49,13 @@ public class HotStuffNode implements APLListener {
         this.f = f;
         this.id = id;
         this.apl.start();
+
+        //TODO ON SERVER BOOT
+        // CASE 1: Read genesis.json, intiialize world state, deploy ist coin, save block_0.json
+        // CASE 2: Load all blocks, replay to rebuild, world state, ready to go
+        // EVMExecutorService evm     = new EVMExecutorService();
+        // BlockStorage       storage = new BlockStorage();
+        // BlockProcessor     processor = new BlockProcessor(evm, storage);
     }
 
     public void onMessage(int senderId, byte[] payload){
