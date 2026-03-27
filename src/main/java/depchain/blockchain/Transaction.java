@@ -123,4 +123,9 @@ public class Transaction implements Serializable{
         return null;
     }
 
+    //For Test
+    public void setSignature(byte[] newSignature) {
+        this.signature = newSignature;
+    }
+
 }
