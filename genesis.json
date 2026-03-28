@@ -1,0 +1,37 @@
+{
+  "blockHash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "previousBlockHash": null,
+  "transactions": [
+    {
+      "from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "to": null,
+      "input": "DEPLOYMENT_BYTECODE_HARDCODED_IN_EVMExecutorService",
+      "value": 0,
+      "nonce": 0,
+      "gasPrice": 0,
+      "gasLimit": 0
+    }
+  ],
+  "state": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+      "balance": "100000",
+      "nonce": 1,
+      "code": null
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+      "balance": "50000",
+      "nonce": 0,
+      "code": null
+    },
+    "cccccccccccccccccccccccccccccccccccccccc": {
+      "balance": "50000",
+      "nonce": 0,
+      "code": null
+    },
+    "1234567891234567891234567891234567891234": {
+      "balance": "0",
+      "nonce": 0,
+      "code": "IST_COIN_RUNTIME_BYTECODE_HARDCODED_IN_EVMExecutorService"
+    }
+  }
+}
