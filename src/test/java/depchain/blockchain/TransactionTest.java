@@ -8,6 +8,7 @@ import java.security.*;
  
 import static org.junit.jupiter.api.Assertions.*;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class TransactionTest {
     
     static final String ID_TOTAL_SUPPLY = "18160ddd";

@@ -1,9 +1,11 @@
 package depchain.blockchain;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
- 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.math.BigInteger;
+import java.util.HashSet;
+import java.util.Set;
+
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.units.bigints.UInt256;
 import org.hyperledger.besu.datatypes.Address;
@@ -15,14 +17,10 @@ import org.hyperledger.besu.evm.fluent.SimpleWorld;
 import org.hyperledger.besu.evm.tracing.StandardJsonTracer;
 import org.web3j.crypto.Hash;
 import org.web3j.utils.Numeric;
- 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.math.BigInteger;
-import java.util.HashSet;
-import java.util.Set;
 
-import depchain.blockchain.ExecutionResult;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 public class EVMExecutorService {
     
@@ -76,11 +74,11 @@ public class EVMExecutorService {
         return worldState;
     }
 
-    public void deployISTCoin(Address contracAddress, Address deployer, Bytes runtimeBytecode, BigInteger totalSupply) {
+    public void deployISTCoin(Address contractAddress, Address deployer, Bytes runtimeBytecode, BigInteger totalSupply) {
 
         // Create contract account
-        worldState.createAccount(contracAddress, 0, Wei.fromEth(0));
-        MutableAccount contractAccount = (MutableAccount) worldState.createAccount(contracAddress);
+        worldState.createAccount(contractAddress, 0, Wei.fromEth(0));
+        MutableAccount contractAccount = (MutableAccount) worldState.get(contractAddress);
 
         // Load runtime bytecode
         contractAccount.setCode(runtimeBytecode);
@@ -98,10 +96,10 @@ public class EVMExecutorService {
         worldState.updater().commit();
 
         // executor point at contract
-        executor.receiver(contracAddress);
-        executor.code(worldState.get(contracAddress).getCode());
+        executor.receiver(contractAddress);
+        executor.code(worldState.get(contractAddress).getCode());
 
-        knownAddresses.add(contracAddress);
+        knownAddresses.add(contractAddress);
     }
 
     public ExecutionResult callContract(Address sender, Address contractAddress, Bytes callData) {
@@ -119,9 +117,14 @@ public class EVMExecutorService {
             return new ExecutionResult(false, 0, BigInteger.ZERO);
         }
 
+        boolean reverted = didRevert(tracerOutput);
         long gasUsed = parseGasUsed(tracerOutput);
-        BigInteger returnValue = parseReturnValue(tracerOutput);
+        
+        if (reverted) {
+            return new ExecutionResult(false, gasUsed, BigInteger.ZERO);
+        }
 
+        BigInteger returnValue = parseReturnValue(tracerOutput);
         return new ExecutionResult(true, gasUsed, returnValue);
     }
 
@@ -205,6 +208,22 @@ public class EVMExecutorService {
  
         } catch (Exception e) {
             return 0;
+        }
+    }
+
+    private boolean didRevert(ByteArrayOutputStream baos) {
+        try {
+            String[] lines = baos.toString().split("\\r?\\n");
+            JsonObject lastLine = JsonParser.parseString(
+                lines[lines.length - 1]).getAsJsonObject();
+
+            // "op" field contains the opcode number of the last executed instruction
+            // REVERT opcode = 0xfd = 253
+            String op = lastLine.get("op").getAsString();            
+            return op.equals("0xfd");
+
+        } catch (Exception e) {
+            return false;
         }
     }
 
