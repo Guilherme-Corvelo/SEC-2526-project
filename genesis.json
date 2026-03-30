@@ -13,22 +13,22 @@
     }
   ],
   "state": {
-    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
       "balance": "100000",
       "nonce": 1,
       "code": null
     },
-    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+    "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
       "balance": "50000",
       "nonce": 0,
       "code": null
     },
-    "cccccccccccccccccccccccccccccccccccccccc": {
+    "0xcccccccccccccccccccccccccccccccccccccccc": {
       "balance": "50000",
       "nonce": 0,
       "code": null
     },
-    "1234567891234567891234567891234567891234": {
+    "0x1234567891234567891234567891234567891234": {
       "balance": "0",
       "nonce": 0,
       "code": "IST_COIN_RUNTIME_BYTECODE_HARDCODED_IN_EVMExecutorService"

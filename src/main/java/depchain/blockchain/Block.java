@@ -44,7 +44,13 @@ public class Block {
                 blockAccount.code = null;
             }
 
-            this.state.put(address.toHexString(), blockAccount);
+            String addressKey = address.toHexString();
+
+            if (!addressKey.startsWith("0x")) {
+                addressKey = "0x" + addressKey;
+            }
+
+            this.state.put(addressKey, blockAccount);
         }
 
         this.transactions = transactions.stream().map(transaction -> {

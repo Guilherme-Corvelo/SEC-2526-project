@@ -11,11 +11,25 @@ import java.util.List;
 
 public class BlockStorage {
     
-    private static final String BLOCKS_DIR = "blocks/";
-    private static final String GENESIS_FILE = "genesis.json";
+    private String BLOCKS_DIR = "blocks/";
+    private String GENESIS_FILE = "genesis.json";
     private final Gson gson;
 
     public BlockStorage() {
+        this.gson = new GsonBuilder().setPrettyPrinting().create();
+    
+        try {
+            Files.createDirectories(Paths.get(BLOCKS_DIR));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create blocks directory", e);
+        }
+    }
+
+    // Used for tests to specify temp dirs
+    public BlockStorage(String blocksDir, String genesisFile) {
+        this.BLOCKS_DIR = blocksDir;
+        this.GENESIS_FILE = genesisFile;
+
         this.gson = new GsonBuilder().setPrettyPrinting().create();
     
         try {

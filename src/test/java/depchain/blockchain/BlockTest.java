@@ -36,8 +36,8 @@ public class BlockTest {
     @BeforeAll
     static void setup() {
         evm = new EVMExecutorService();
-        evm.createAccount(ALICE,   Wei.of(100_000));
-        evm.createAccount(BOB,     Wei.of(50_000));
+        evm.createAccount(ALICE, Wei.of(100_000));
+        evm.createAccount(BOB, Wei.of(50_000));
         evm.createAccount(CHARLIE, Wei.of(50_000));
         evm.deployISTCoin(CONTRACT, ALICE, TOTAL_SUPPLY);
     }
