@@ -46,6 +46,10 @@ public class BlockProcessor {
 
         for (Map.Entry<String, BlockAccount> entry : genesis.getState().entrySet()) {
 
+            if (entry.getKey().equals(Address.fromHexString(CONTRACT_ADDRESS).toHexString())) {
+                continue;
+            }
+
             Address address = Address.fromHexString(entry.getKey());
             Wei balance = Wei.of(new BigInteger(entry.getValue().balance));
             evm.createAccount(address, balance);

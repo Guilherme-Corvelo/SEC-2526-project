@@ -15,6 +15,7 @@ import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.fluent.EVMExecutor;
 import org.hyperledger.besu.evm.fluent.SimpleWorld;
 import org.hyperledger.besu.evm.tracing.StandardJsonTracer;
+import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 import org.web3j.crypto.Hash;
 import org.web3j.utils.Numeric;
 
@@ -108,12 +109,18 @@ public class EVMExecutorService {
 
         tracerOutput.reset();
 
+        WorldUpdater updater = worldState.updater();
+
+        executor.worldUpdater(updater);
+
         executor.sender(sender);
         executor.receiver(contractAddress);
         executor.code(worldState.get(contractAddress).getCode());
         executor.callData(callData);
         
         executor.execute();
+
+        updater.commit();
 
         if (tracerOutput.size() == 0 ) {
             return new ExecutionResult(false, 0, BigInteger.ZERO);
