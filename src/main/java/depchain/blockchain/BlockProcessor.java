@@ -80,6 +80,10 @@ public class BlockProcessor {
             Address address = Address.fromHexString(entry.getKey());
             BlockAccount accountSnapshot = entry.getValue();
 
+            if (entry.getKey().equals(Address.fromHexString(CONTRACT_ADDRESS).toHexString())) {
+                continue;
+            }
+
             evm.createAccount(address, Wei.of(new BigInteger(accountSnapshot.balance)));
 
             for (long i = 0; i < accountSnapshot.nonce; i++) {
@@ -88,6 +92,12 @@ public class BlockProcessor {
         }
 
         istCoinAddress = Address.fromHexString(CONTRACT_ADDRESS);
+
+        //TODO: HAD TO FIX BLOCKPROCESSOR LOADFROMDISK TO ADD DEPLOYISTCOIN
+        // CURRENTLY OUR BLOCK DOES NOT SAVE IST COIN BALANCE
+        // ON REBOOT FROM DISK LOADING THAT IS COMPLETELY LOST EVERYONE STARTS WITH 0 AGAIN?, ALICE HAS TOTAL SUPPLY?
+        evm.deployISTCoin(istCoinAddress, Address.fromHexString(DEPLOYER_ADDRESS), TOTAL_SUPPLY);
+
         this.currentBlockNumber = latestNumber;
         this.lastBlockHash = latest.getBlockHash();
 
@@ -136,7 +146,7 @@ public class BlockProcessor {
         this.currentBlockNumber = newBlockNumber;
         this.lastBlockHash = newBlock.getBlockHash();
 
-        Debug.debug(" Block " + newBlockNumber + " - " + executed.size() + "transactions.");
+        Debug.debug(" Block " + newBlockNumber + " - " + executed.size() + " transactions.");
 
         return newBlock;
     }

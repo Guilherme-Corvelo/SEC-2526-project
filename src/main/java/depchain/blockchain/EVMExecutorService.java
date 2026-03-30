@@ -105,6 +105,29 @@ public class EVMExecutorService {
         knownAddresses.add(contractAddress);
     }
 
+    public void deployISTCoin(Address contractAddress, BigInteger totalSupply) {
+
+        // Create contract account
+        worldState.createAccount(contractAddress, 0, Wei.fromEth(0));
+        MutableAccount contractAccount = (MutableAccount) worldState.get(contractAddress);
+
+        // Load runtime bytecode
+        contractAccount.setCode(Bytes.fromHexString(runtimeBytecode));
+
+        // slot 0 = totalSupply
+        contractAccount.setStorageValue(UInt256.valueOf(0), 
+                                        UInt256.fromBytes(Bytes.fromHexString(toHex256(totalSupply))));
+
+
+        worldState.updater().commit();
+
+        // executor point at contract
+        executor.receiver(contractAddress);
+        executor.code(worldState.get(contractAddress).getCode());
+
+        knownAddresses.add(contractAddress);
+    }
+
     public ExecutionResult callContract(Address sender, Address contractAddress, Bytes callData) {
 
         tracerOutput.reset();
@@ -121,6 +144,7 @@ public class EVMExecutorService {
         executor.execute();
 
         updater.commit();
+
 
         if (tracerOutput.size() == 0 ) {
             return new ExecutionResult(false, 0, BigInteger.ZERO);
@@ -179,6 +203,7 @@ public class EVMExecutorService {
     private BigInteger parseReturnValue(ByteArrayOutputStream baos) {
         try {
             String[] lines = baos.toString().split("\\r?\\n");
+                       
             JsonObject jsonObject = JsonParser.parseString(
                 lines[lines.length - 1]).getAsJsonObject();
  
