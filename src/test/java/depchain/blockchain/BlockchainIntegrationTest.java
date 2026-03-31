@@ -170,9 +170,6 @@ public class BlockchainIntegrationTest {
         BlockProcessor freshProcessor = new BlockProcessor(freshEvm, storage);
         freshProcessor.startup();
 
-        //TODO: HAD TO FIX BLOCKPROCESSOR LOADFROMDISK TO ADD DEPLOYISTCOIN
-        // CURRENTLY OUR BLOCK DOES NOT SAVE IST COIN BALANCE
-        // ON REBOOT FROM DISK LOADING THAT IS COMPLETELY LOST EVERYONE STARTS WITH 0 AGAIN?, ALICE HAS TOTAL SUPPLY?
         Block block2 = freshProcessor.processBlock(List.of(
             signedContractCall(ALICE.toHexString(),
                 ID_TRANSFER + pad(BOB) + pad(BigInteger.valueOf(500)), 2, aliceKeys)
@@ -230,11 +227,6 @@ public class BlockchainIntegrationTest {
         EVMExecutorService freshEvm = new EVMExecutorService();
         BlockProcessor freshProcessor = new BlockProcessor(freshEvm, storage);
         freshProcessor.startup();
-
-
-        //TODO: HAD TO FIX BLOCKPROCESSOR LOADFROMDISK TO ADD DEPLOYISTCOIN
-        // CURRENTLY OUR BLOCK DOES NOT SAVE IST COIN BALANCE
-        // ON REBOOT FROM DISK LOADING THAT IS COMPLETELY LOST EVERYONE STARTS WITH 0 AGAIN?, ALICE HAS TOTAL SUPPLY?
 
         ExecutionResult bobIST = freshEvm.callContract(
             ALICE, CONTRACT,

@@ -128,6 +128,56 @@ public class EVMExecutorService {
         knownAddresses.add(contractAddress);
     }
 
+    public void setISTBalance(Address contractAddress, Address accountAddress, BigInteger balance) {
+        MutableAccount contractAccount = (MutableAccount) worldState.get(contractAddress);
+        if (contractAccount == null) {
+            throw new IllegalStateException("IST contract account not found");
+        }
+
+        String balanceSlot = mappingSlot(accountAddress.toHexString(), 1);
+        contractAccount.setStorageValue(
+            UInt256.fromHexString(balanceSlot),
+            UInt256.fromBytes(Bytes.fromHexString(toHex256(balance)))
+        );
+
+        worldState.updater().commit();
+    }
+
+    public BigInteger getISTBalance(Address contractAddress, Address accountAddress) {
+        MutableAccount contractAccount = (MutableAccount) worldState.get(contractAddress);
+        if (contractAccount == null) {
+            return BigInteger.ZERO;
+        }
+
+        String balanceSlot = mappingSlot(accountAddress.toHexString(), 1);
+        return contractAccount.getStorageValue(UInt256.fromHexString(balanceSlot)).toBigInteger();
+    }
+
+    public void setISTAllowance(Address contractAddress, Address owner, Address spender, BigInteger allowance) {
+        MutableAccount contractAccount = (MutableAccount) worldState.get(contractAddress);
+        if (contractAccount == null) {
+            throw new IllegalStateException("IST contract account not found");
+        }
+
+        String allowanceSlot = nestedMappingSlot(owner.toHexString(), spender.toHexString(), 2);
+        contractAccount.setStorageValue(
+            UInt256.fromHexString(allowanceSlot),
+            UInt256.fromBytes(Bytes.fromHexString(toHex256(allowance)))
+        );
+
+        worldState.updater().commit();
+    }
+
+    public BigInteger getISTAllowance(Address contractAddress, Address owner, Address spender) {
+        MutableAccount contractAccount = (MutableAccount) worldState.get(contractAddress);
+        if (contractAccount == null) {
+            return BigInteger.ZERO;
+        }
+
+        String allowanceSlot = nestedMappingSlot(owner.toHexString(), spender.toHexString(), 2);
+        return contractAccount.getStorageValue(UInt256.fromHexString(allowanceSlot)).toBigInteger();
+    }
+
     public ExecutionResult callContract(Address sender, Address contractAddress, Bytes callData) {
 
         tracerOutput.reset();
@@ -261,18 +311,25 @@ public class EVMExecutorService {
         }
     }
 
-    private String mappingSlot(String address, int slotIndex) {
+    private static String mappingSlot(String address, int slotIndex) {
         String paddedKey  = padHex(address);
         String paddedSlot = toHex256(BigInteger.valueOf(slotIndex));
         byte[] input      = Numeric.hexStringToByteArray(paddedKey + paddedSlot);
         return Numeric.toHexStringNoPrefix(Hash.sha3(input));
     }
+
+    private static String nestedMappingSlot(String owner, String spender, int slotIndex) {
+        String ownerSlot = mappingSlot(owner, slotIndex);
+        String paddedSpender = padHex(spender);
+        byte[] input = Numeric.hexStringToByteArray(paddedSpender + ownerSlot);
+        return Numeric.toHexStringNoPrefix(Hash.sha3(input));
+    }
  
-    private String toHex256(BigInteger n) {
+    private static String toHex256(BigInteger n) {
         return String.format("%064x", n);
     }
  
-    private String padHex(String hex) {
+    private static String padHex(String hex) {
         if (hex.startsWith("0x")) hex = hex.substring(2);
         return "0".repeat(64 - hex.length()) + hex;
     }

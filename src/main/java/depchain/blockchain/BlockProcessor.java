@@ -62,7 +62,13 @@ public class BlockProcessor {
         //TODO: Not sure if deploying contract should increase nonce
         evm.incrementNonce(Address.fromHexString(DEPLOYER_ADDRESS));
 
-        Block genesisBlock = new Block(0, null, new ArrayList<>(), evm.getWorldState(), evm.getKnownAddresses());
+        Block genesisBlock = new Block(
+            0,
+            null,
+            new ArrayList<>(),
+            evm.getWorldState(),
+            evm.getKnownAddresses()
+        );
     
         storage.saveBlock(genesisBlock, 0);
         this.currentBlockNumber = 0;
@@ -97,6 +103,28 @@ public class BlockProcessor {
         // CURRENTLY OUR BLOCK DOES NOT SAVE IST COIN BALANCE
         // ON REBOOT FROM DISK LOADING THAT IS COMPLETELY LOST EVERYONE STARTS WITH 0 AGAIN?, ALICE HAS TOTAL SUPPLY?
         evm.deployISTCoin(istCoinAddress, Address.fromHexString(DEPLOYER_ADDRESS), TOTAL_SUPPLY);
+
+        for (Map.Entry<String, BlockAccount> entry : latest.getState().entrySet()) {
+            if (entry.getKey().equals(Address.fromHexString(CONTRACT_ADDRESS).toHexString())) {
+                continue;
+            }
+
+            BlockAccount accountSnapshot = entry.getValue();
+            if (accountSnapshot.istBalance == null) {
+                continue;
+            }
+
+            Address account = Address.fromHexString(entry.getKey());
+            evm.setISTBalance(istCoinAddress, account, new BigInteger(accountSnapshot.istBalance));
+
+            if (accountSnapshot.allowances != null) {
+                for (Map.Entry<String, String> allowanceEntry : accountSnapshot.allowances.entrySet()) {
+                    Address spender = Address.fromHexString(allowanceEntry.getKey());
+                    BigInteger allowance = new BigInteger(allowanceEntry.getValue());
+                    evm.setISTAllowance(istCoinAddress, account, spender, allowance);
+                }
+            }
+        }
 
         this.currentBlockNumber = latestNumber;
         this.lastBlockHash = latest.getBlockHash();
@@ -140,7 +168,13 @@ public class BlockProcessor {
 
         int newBlockNumber = currentBlockNumber + 1;
         
-        Block newBlock = new Block(newBlockNumber, lastBlockHash, executed, evm.getWorldState(), evm.getKnownAddresses());
+        Block newBlock = new Block(
+            newBlockNumber,
+            lastBlockHash,
+            executed,
+            evm.getWorldState(),
+            evm.getKnownAddresses()
+        );
 
         storage.saveBlock(newBlock, newBlockNumber);
         this.currentBlockNumber = newBlockNumber;
@@ -193,4 +227,5 @@ public class BlockProcessor {
     public Address getISTCoinAddress() {
         return istCoinAddress;
     }
+
 }
