@@ -103,7 +103,7 @@ public class BlockStorageTest {
 
     @Test
     @Order(4)
-    @DisplayName("Test 4 — saveBlock and loadBlock preserves previousBlockHash")
+    @DisplayName("Test 4")
     void testSaveAndLoadPreviousHash() {
         Block block0 = new Block(0, null, new ArrayList<>(),
             evm.getWorldState(), evm.getKnownAddresses());

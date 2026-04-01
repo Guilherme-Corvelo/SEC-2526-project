@@ -65,7 +65,7 @@ public class BlockProcessor {
         Block genesisBlock = new Block(
             0,
             null,
-            new ArrayList<>(),
+            genesis.getTransactions(),
             evm.getWorldState(),
             evm.getKnownAddresses()
         );
@@ -171,7 +171,7 @@ public class BlockProcessor {
         Block newBlock = new Block(
             newBlockNumber,
             lastBlockHash,
-            executed,
+            Block.convertTransactions(executed),
             evm.getWorldState(),
             evm.getKnownAddresses()
         );

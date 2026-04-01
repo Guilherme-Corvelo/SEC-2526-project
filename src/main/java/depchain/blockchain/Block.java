@@ -22,7 +22,7 @@ public class Block {
     private List<BlockTransaction> transactions;
     private Map<String, BlockAccount> state;
     
-    public Block(int blockNumber, String previousBlockHash, List<Transaction> transactions, SimpleWorld worldState, Set<Address> knownAddresses) {
+    public Block(int blockNumber, String previousBlockHash, List<BlockTransaction> transactions, SimpleWorld worldState, Set<Address> knownAddresses) {
 
         this.previousBlockHash = previousBlockHash;
 
@@ -81,17 +81,7 @@ public class Block {
             this.state.put(addressKey, blockAccount);
         }
 
-        this.transactions = transactions.stream().map(transaction -> {
-            BlockTransaction blockTransaction = new BlockTransaction();
-            blockTransaction.from = transaction.getFrom();
-            blockTransaction.to = transaction.getTo();
-            blockTransaction.input = transaction.getInput();
-            blockTransaction.value = transaction.getValue();
-            blockTransaction.nonce = transaction.getNonce();
-            blockTransaction.gasPrice = transaction.getGasPrice();
-            blockTransaction.gasLimit = transaction.getGasLimit();
-            return blockTransaction;
-        }).toList();
+        this.transactions = transactions;
 
         this.blockHash = computeHash(blockNumber);
     }
@@ -197,5 +187,19 @@ public class Block {
 
     public Map<String, BlockAccount> getState() {
         return state;
+    }
+
+    public static List<BlockTransaction> convertTransactions(List<Transaction> transactions){
+        return transactions.stream().map(transaction -> {
+            BlockTransaction blockTransaction = new BlockTransaction();
+            blockTransaction.from = transaction.getFrom();
+            blockTransaction.to = transaction.getTo();
+            blockTransaction.input = transaction.getInput();
+            blockTransaction.value = transaction.getValue();
+            blockTransaction.nonce = transaction.getNonce();
+            blockTransaction.gasPrice = transaction.getGasPrice();
+            blockTransaction.gasLimit = transaction.getGasLimit();
+            return blockTransaction;
+        }).toList();
     }
 }

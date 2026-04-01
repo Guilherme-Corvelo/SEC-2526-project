@@ -3,14 +3,19 @@ package depchain.consensus;
 import depchain.network.APLListener;
 import depchain.Debug;
 import depchain.API.Request;
+import depchain.blockchain.BlockProcessor;
+import depchain.blockchain.BlockStorage;
+import depchain.blockchain.EVMExecutorService;
+import depchain.blockchain.Transaction;
 import depchain.network.APL;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -37,6 +42,13 @@ public class HotStuffNode implements APLListener {
     private Thread viewTimerThread = null;
     private boolean timerCancelled = false;
     private static final long TIMEOUT_MS = 5000;
+    private static final long BLOCK_GAS_LIMIT = 1_000_000L;
+    private static final long BLOCK_ASSEMBLY_TIMEOUT_MS = 2_000L;
+    private final BlockProcessor blockProcessor;
+    private final List<Transaction> pendingTransactions = new ArrayList<>();
+    private long pendingGas = 0L;
+    private Thread assemblyTimerThread = null;
+    private boolean assemblyTimerCancelled = false;
 
     public HotStuffNode(int id, 
                     int port, Map<Integer, InetSocketAddress> addresses,
@@ -50,12 +62,10 @@ public class HotStuffNode implements APLListener {
         this.id = id;
         this.apl.start();
 
-        //TODO ON SERVER BOOT
-        // CASE 1: Read genesis.json, intiialize world state, deploy ist coin, save block_0.json
-        // CASE 2: Load all blocks, replay to rebuild, world state, ready to go
-        // EVMExecutorService evm     = new EVMExecutorService();
-        // BlockStorage       storage = new BlockStorage();
-        // BlockProcessor     processor = new BlockProcessor(evm, storage);
+        EVMExecutorService evm = new EVMExecutorService();
+        BlockStorage storage = new BlockStorage("blocks/node_" + id + "/", "genesis.json");
+        this.blockProcessor = new BlockProcessor(evm, storage);
+        this.blockProcessor.startup();
     }
 
     public void onMessage(int senderId, byte[] payload){
@@ -76,19 +86,72 @@ public class HotStuffNode implements APLListener {
 
     //TODO:THINK about new type for hotstuff response
     public void handleRequest(int senderId, Request request){
-        //Debug.debug( "At Node: " + getId() + " Handling request :" + request.toString());
-        Node requestNode = new Node(request.getData(), latestNode);
-        //TODO:MAybe verification to extend?
-        
-        Message NewViewMessage = new Message(Type.NEWVIEW, getView(), requestNode, senderId);
+        if (request.getTransaction() == null) {
+            return;
+        }
+        enqueueForAssembly(senderId, request.getTransaction());
+    }
 
-        Debug.debug( "At Node: " + getId() + " Sent NewView message :" + NewViewMessage.toString() + "to leader: " + getLeaderId());
-        send(getLeaderId(), NewViewMessage.serialize());
-        
-        if (getId() != getLeaderId()){ 
+    private synchronized void enqueueForAssembly(int requesterId, Transaction transaction) {
+        pendingTransactions.add(transaction);
+        pendingGas += Math.max(0L, transaction.getGasLimit());
+
+        if (assemblyTimerThread == null || !assemblyTimerThread.isAlive()) {
+            startAssemblyTimer(requesterId);
+        }
+
+        if (pendingGas >= BLOCK_GAS_LIMIT) {
+            cancelAssemblyTimer();
+            proposePendingTransactions(requesterId);
+        }
+    }
+
+    private synchronized void startAssemblyTimer(int requesterId) {
+        this.assemblyTimerCancelled = false;
+        this.assemblyTimerThread = new Thread(() -> {
+            try {
+                Thread.sleep(BLOCK_ASSEMBLY_TIMEOUT_MS);
+                synchronized (this) {
+                    if (!assemblyTimerCancelled && !pendingTransactions.isEmpty()) {
+                        proposePendingTransactions(requesterId);
+                    }
+                }
+            } catch (InterruptedException ignored) {
+                //
+            }
+        });
+        this.assemblyTimerThread.setDaemon(true);
+        this.assemblyTimerThread.start();
+    }
+
+    private synchronized void cancelAssemblyTimer() {
+        this.assemblyTimerCancelled = true;
+        if (this.assemblyTimerThread != null && this.assemblyTimerThread.isAlive()) {
+            this.assemblyTimerThread.interrupt();
+        }
+        this.assemblyTimerThread = null;
+    }
+
+    private synchronized void proposePendingTransactions(int requesterId) {
+        if (pendingTransactions.isEmpty()) {
+            return;
+        }
+
+        List<Transaction> proposedTransactions = new ArrayList<>(pendingTransactions);
+        pendingTransactions.clear();
+        pendingGas = 0L;
+
+        Node requestNode = new Node(proposedTransactions, latestNode);
+        Message newViewMessage = new Message(Type.NEWVIEW, getView(), requestNode, requesterId);
+
+        Debug.debug("At Node: " + getId() + " Assembled block candidate with " +
+            proposedTransactions.size() + " txs and sent NEWVIEW to leader " + getLeaderId());
+        send(getLeaderId(), newViewMessage.serialize());
+
+        if (getId() != getLeaderId()) {
             setPendingVoteType(Type.PREPARE);
         }
-        startViewTimer(NewViewMessage);
+        startViewTimer(newViewMessage);
     }
 
     public synchronized void handleMessage(int senderId, Message msg){
@@ -269,6 +332,7 @@ public class HotStuffNode implements APLListener {
         //TODO: Think aboiut teshdold signs
         //TODO: (VALIDATE QC???)
         latestNode = msg.getNode();
+        blockProcessor.processBlock(latestNode.getProposedTransactions());
 
         Debug.debug( "At Node: " + getId() + " Sent Decide message :" + msg.toString() + "to client " + msg.getRequesterId());
 

@@ -59,7 +59,7 @@ public class QuorumCertificate implements Serializable {
 
         if (!(this.type == other.type) ||
             !(this.view == other.view ) ||
-            !this.node.equals(node)){
+            !this.node.equals(other.node)){
             return false;
         }
 

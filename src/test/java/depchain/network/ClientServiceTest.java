@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import depchain.Debug;
+import depchain.blockchain.Transaction;
 import depchain.client.Client;
 import depchain.consensus.HotStuffNode;
 
@@ -72,7 +73,18 @@ public class ClientServiceTest {
     
     //TODO:Make threads end before test
     @Test
-    void clientServiceRequest (){
-        client.send("Raw");
+    void clientServiceRequest () throws Exception{
+        Transaction transaction = new Transaction(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            null,
+            10,
+            0,
+            1,
+            21000,
+            keysA.getPublic()
+        );
+        transaction.sign(keysA.getPrivate());
+        client.send(transaction);
     }
 }

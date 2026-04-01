@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 
 import depchain.Debug;
+import depchain.blockchain.Transaction;
 import depchain.consensus.Message;
 import depchain.network.APL;
 import depchain.network.APLListener;
@@ -56,11 +57,11 @@ public class DepchainAPI implements APLListener{
         
     }
 
-    public void append(String action) {
+    public void append(Transaction transaction) {
         synchronized(lock) {
             this.receivedResponses.clear();
 
-            Request request = new Request(action);
+            Request request = new Request(transaction);
             broadcast(request.serialize());
 
             //Maybe timeout?
@@ -76,7 +77,7 @@ public class DepchainAPI implements APLListener{
 
         }
 
-        System.out.println( action + " was appended successfully");
+        System.out.println("Transaction was appended successfully");
     }
 
     public void send(int receiverId, byte[] msg){

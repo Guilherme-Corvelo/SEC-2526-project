@@ -4,3 +4,4 @@
 *.xml
 *.dumpstream
 /target
+/blocks

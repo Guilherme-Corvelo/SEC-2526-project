@@ -5,6 +5,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.Signature;
+import java.util.Arrays;
+import java.util.Objects;
 
 import org.bouncycastle.jce.exception.ExtCertPathValidatorException;
 
@@ -121,6 +123,23 @@ public class Transaction implements Serializable{
     //For Test
     public void setSignature(byte[] newSignature) {
         this.signature = newSignature;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof Transaction other)) {
+            return false;
+        }
+
+        return Objects.equals(from, other.from) &&
+            Objects.equals(to, other.to) &&
+            Objects.equals(input, other.input) &&
+            value == other.value &&
+            nonce == other.nonce &&
+            gasPrice == other.gasPrice &&
+            gasLimit == other.gasLimit &&
+            Arrays.equals(signature, other.signature) &&
+            Arrays.equals(senderPublicKeyBytes, other.senderPublicKeyBytes);
     }
 
 }

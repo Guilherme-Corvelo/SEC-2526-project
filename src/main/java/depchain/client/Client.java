@@ -20,16 +20,9 @@ public class Client{
         this.depchain = new DepchainAPI(clientId, port, serviceAddress, privateKey, publicKeys,f);
     }
 
-    public void send(String action){
-        Debug.debug("Client Sent request to append" + action);
-        depchain.append(action);
-        Debug.debug("Client received response");
-    }
-
     public void send(Transaction transaction){
         Debug.debug("Client Sent transaction");
-        //TODO: API NEEDS TO RECEIVE TRANSACTION
-        //depchain.append(transaction);
+        depchain.append(transaction);
         Debug.debug("Client received response");
     }
 }

@@ -6,15 +6,17 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
-public class Request implements Serializable{
-    private String data = null;
+import depchain.blockchain.Transaction;
 
-    public Request(String data) {
-        this.data = data;
+public class Request implements Serializable{
+    private Transaction transaction = null;
+
+    public Request(Transaction transaction) {
+        this.transaction = transaction;
     }
 
-    public String getData() {
-        return data;
+    public Transaction getTransaction() {
+        return transaction;
     }
 
     public byte[] serialize() {
@@ -48,12 +50,12 @@ public class Request implements Serializable{
         
         Request other = (Request) obj;
 
-        if (this.data == null) {
-            if (other.data != null) {
+        if (this.transaction == null) {
+            if (other.transaction != null) {
                 return false;
             }
         } else {
-            if (!this.data.equals(other.data)) {
+            if (!this.transaction.equals(other.transaction)) {
                 return false;
             }
         }
@@ -64,6 +66,6 @@ public class Request implements Serializable{
     @Override
     public String toString() {
         return "ServiceMessage[" +
-        "data=" + (data != null ? data.toString() : "null") + "]";
+        "transaction=" + (transaction != null ? transaction.toString() : "null") + "]";
     }
 }

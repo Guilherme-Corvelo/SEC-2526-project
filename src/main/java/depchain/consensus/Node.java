@@ -4,24 +4,24 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.List;
 import java.io.Serializable;
-import java.lang.String;
 
-import depchain.Debug;
+import depchain.blockchain.Transaction;
 
 public class Node implements Serializable{
     private byte[] parentLink;
-    private String action;
+    private List<Transaction> proposedTransactions;
 
-    public Node (String action, byte[] parentLink){
+    public Node (List<Transaction> proposedTransactions, byte[] parentLink){
         this.parentLink = parentLink;
-        this.action = action;
+        this.proposedTransactions = proposedTransactions;
     }
 
-    public Node (String action, Node parentNode ){
+    public Node (List<Transaction> proposedTransactions, Node parentNode ){
         try{
             this.parentLink = extend(parentNode);
-            this.action = action;
+            this.proposedTransactions = proposedTransactions;
         } catch (NoSuchAlgorithmException e ) {
             System.err.print("Couldnt hash node parent link");
         }
@@ -29,7 +29,7 @@ public class Node implements Serializable{
 
     public Node (){
         this.parentLink = null;
-        this.action = "Genesis";
+        this.proposedTransactions = List.of();
     }
 
     private byte[] extend(Node prevNode) throws NoSuchAlgorithmException{
@@ -37,13 +37,33 @@ public class Node implements Serializable{
         if (prevNode.getParentLink() != null){
             md.update(prevNode.getParentLink());
         }
-        //Debug.debug(prevNode.action);
-        md.update(prevNode.action.getBytes());
+        md.update(serializeTransactions(prevNode.proposedTransactions));
         return  md.digest();
     }
 
-    public String getAction(){
-        return this.action;
+    private byte[] serializeTransactions(List<Transaction> transactions) {
+        if (transactions == null || transactions.isEmpty()) {
+            return new byte[0];
+        }
+
+        StringBuilder serialized = new StringBuilder();
+
+        for (Transaction transaction : transactions) {
+            serialized
+                .append(transaction.getFrom()).append("|")
+                .append(transaction.getTo() != null ? transaction.getTo() : "null").append("|")
+                .append(transaction.getInput() != null ? transaction.getInput() : "").append("|")
+                .append(transaction.getValue()).append("|")
+                .append(transaction.getNonce()).append("|")
+                .append(transaction.getGasPrice()).append("|")
+                .append(transaction.getGasLimit()).append(";");
+        }
+
+        return serialized.toString().getBytes();
+    }
+
+    public List<Transaction> getProposedTransactions(){
+        return this.proposedTransactions;
     }
 
     public byte[] getParentLink() {
@@ -77,12 +97,13 @@ public class Node implements Serializable{
         }
         
         Node other = (Node) obj;
-        return Arrays.equals(getParentLink(), other.getParentLink()) && this.action.equals(other.action);
+        return Arrays.equals(getParentLink(), other.getParentLink()) &&
+            this.proposedTransactions.equals(other.proposedTransactions);
     }
 
     @Override
     public String toString() {
-        return "Node[action=" + action + 
+        return "Node[proposedTransactions=" + proposedTransactions + 
             ", parentLink=" + (parentLink != null ? HexFormat.of().formatHex(getParentLink()) : "null") + "]";
     }
 }

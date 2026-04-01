@@ -117,7 +117,7 @@ public class Message implements Serializable{
         if (!(this.type == other.type) ||
             !(this.viewNumber == other.viewNumber ) ||
             !(this.requesterId == other.requesterId) ||
-            !this.node.equals(node)){
+            !this.node.equals(other.node)){
             return false;
         }
 
