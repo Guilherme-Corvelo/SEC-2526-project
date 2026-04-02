@@ -5,21 +5,20 @@ import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
-import java.security.NoSuchAlgorithmException;
-import java.util.Set;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HexFormat;
 
-import com.weavechain.curve25519.Scalar;
-//import com.weavechain.sig.ThresholdSigEd25519;
-
-import depchain.network.APL;
+import threshsig.KeyShare;
+import threshsig.SigShare;
 
 public class Message implements Serializable{
     private Type type;
     private int viewNumber;
     private Node node;
     private QuorumCertificate justify = null;
-    //private Scalar  partialSign = null; 
-    private String partialSign = null;
+    private SigShare partialSign = null;
 
     private int requesterId;
 
@@ -50,9 +49,14 @@ public class Message implements Serializable{
     }
     */
 
-    //TODO:Delete LAter
-    public void Vote(){
-        this.partialSign = "signed";
+    public void vote(KeyShare share){
+        byte[] typeData = this.getType().name().getBytes(StandardCharsets.UTF_8);
+        byte[] viewData = ByteBuffer.allocate(Integer.BYTES).putInt(this.getView()).array();
+        byte[] nodeData = this.getNode().serialize();
+        byte[] data = ByteBuffer.allocate(typeData.length + viewData.length + nodeData.length)
+                        .put(typeData).put(nodeData).put(viewData).array(); 
+
+        this.partialSign = share.sign(data);
     }
     public void setJustify(QuorumCertificate justify){
         this.justify = justify;
@@ -74,8 +78,7 @@ public class Message implements Serializable{
         return this.justify;
     }
 
-    //TODO:CHange to corret type later
-    public String getPartialSign() {
+    public SigShare getPartialSign() {
         return this.partialSign;
     }
 
@@ -136,7 +139,7 @@ public class Message implements Serializable{
                 return false;
             }
         } else {
-            if (!this.partialSign.equals(other.partialSign)) {
+            if (!Arrays.equals(this.partialSign.getBytes(), other.partialSign.getBytes())) {
                 return false;
             }
         }
@@ -148,6 +151,6 @@ public class Message implements Serializable{
     public String toString() {
         return "Message[viewNumber=" + viewNumber + ", type=" + type +
                ", node=" + node.toString() + ", justify=" + (justify != null ? justify.toString() : "null") +
-               ", partialSign=" + (partialSign != null ? partialSign.toString() : "null") + "]";
+               ", partialSign=" + (partialSign != null ? HexFormat.of().formatHex(partialSign.getBytes()) : "null") + "]";
     }
 }

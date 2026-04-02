@@ -4,8 +4,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
-import org.hyperledger.besu.evm.operation.ExtStaticCallOperation;
-
 import depchain.crypto.KeyVault;
 import depchain.blockchain.Transaction;
 import java.security.*;

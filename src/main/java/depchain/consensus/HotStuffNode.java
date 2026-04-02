@@ -8,9 +8,15 @@ import depchain.blockchain.BlockStorage;
 import depchain.blockchain.EVMExecutorService;
 import depchain.blockchain.Transaction;
 import depchain.network.APL;
+import threshsig.GroupKey;
+import threshsig.KeyShare;
+import threshsig.SigShare;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.ArrayList;
@@ -35,7 +41,7 @@ public class HotStuffNode implements APLListener {
 
     private LinkedList<Integer> broadcastTo;
     private int id;
-    private int n;
+    private int numNodes;
     private Type pendingVoteType = Type.NEWVIEW;
     private ConcurrentHashMap<Integer, Message> votes = new ConcurrentHashMap<>();
     
@@ -44,11 +50,15 @@ public class HotStuffNode implements APLListener {
     private static final long TIMEOUT_MS = 5000;
     private static final long BLOCK_GAS_LIMIT = 1_000_000L;
     private static final long BLOCK_ASSEMBLY_TIMEOUT_MS = 2_000L;
+    private volatile static ThresholdContext THRESHOLD_CONTEXT = null;
     private final BlockProcessor blockProcessor;
     private final List<Transaction> pendingTransactions = new ArrayList<>();
     private long pendingGas = 0L;
     private Thread assemblyTimerThread = null;
     private boolean assemblyTimerCancelled = false;
+    private final GroupKey groupKey;
+    private final KeyShare localShare;
+    private final int thresholdK;
 
     public HotStuffNode(int id, 
                     int port, Map<Integer, InetSocketAddress> addresses,
@@ -57,15 +67,31 @@ public class HotStuffNode implements APLListener {
         this.apl = new APL(id, port, addresses, privateKey, publicKeys);
         this.apl.registerListener(this);
         this.broadcastTo = broadcastTo;
-        this.n = broadcastTo.size();
+        this.numNodes = broadcastTo.size();
         this.f = f;
         this.id = id;
         this.apl.start();
+        this.thresholdK = this.numNodes - this.f;
+
+        createThresholdContext(this.thresholdK, numNodes);
+  
+        this.groupKey = THRESHOLD_CONTEXT.getGroupKey();
+        this.localShare = THRESHOLD_CONTEXT.getShare(broadcastTo.indexOf(getId()));
 
         EVMExecutorService evm = new EVMExecutorService();
         BlockStorage storage = new BlockStorage("blocks/node_" + id + "/", "genesis.json");
         this.blockProcessor = new BlockProcessor(evm, storage);
         this.blockProcessor.startup();
+    }
+
+    private static void createThresholdContext (int threshold, int totalNum){
+        if (THRESHOLD_CONTEXT == null) {
+            synchronized (ThresholdContext.class) {
+                if (THRESHOLD_CONTEXT == null) {
+                    THRESHOLD_CONTEXT = new ThresholdContext(threshold, totalNum);
+                }
+            }
+        }
     }
 
     public void onMessage(int senderId, byte[] payload){
@@ -220,7 +246,11 @@ public class HotStuffNode implements APLListener {
             if(enoughVotes()){
                 Message precommitMsg = new Message(Type.PRECOMMIT, getView(), msg.getNode(), msg.getRequesterId());
 
-                QuorumCertificate highQC = new QuorumCertificate(Type.PRECOMMIT, getView(), msg.getNode(), combineVotes());
+                BigInteger thresholdSig = combineVotes();
+                if (thresholdSig == null) {
+                    return;
+                }
+                QuorumCertificate highQC = new QuorumCertificate(Type.PREPARE, getView(), msg.getNode(), thresholdSig);
                 precommitMsg.setJustify(highQC);
 
                 setPendingVoteType(Type.PRECOMMIT);
@@ -236,8 +266,7 @@ public class HotStuffNode implements APLListener {
 
                 if (validateQC(msg.getjustify())) {
                     setPrepareQC(msg.getjustify());
-                    //TODO: Think aboiut teshdold signs
-                    msg.Vote();
+                    msg.vote(localShare);
 
                     Debug.debug( "At Node: " + getId() + " Sent Prepare message :" + msg.toString() + " to leader: " + getLeaderId());
                     
@@ -260,7 +289,11 @@ public class HotStuffNode implements APLListener {
             if(enoughVotes()){
                 Message commitMsg = new Message(Type.COMMIT, getView(), msg.getNode(), msg.getRequesterId());
 
-                QuorumCertificate highQC = new QuorumCertificate(Type.COMMIT, getView(), msg.getNode(), combineVotes());
+                BigInteger thresholdSig = combineVotes();
+                if (thresholdSig == null) {
+                    return;
+                }
+                QuorumCertificate highQC = new QuorumCertificate(Type.PRECOMMIT, getView(), msg.getNode(), thresholdSig);
                 commitMsg.setJustify(highQC);
 
                 setPendingVoteType(Type.COMMIT);
@@ -276,9 +309,7 @@ public class HotStuffNode implements APLListener {
             //Debug.debug("Entered if precommit node :" + getId());
             if (validateQC(msg.getjustify())) {
                 setPrepareQC(msg.getjustify());
-                //TODO: Think aboiut teshdold signs
-                
-                msg.Vote();
+                msg.vote(localShare);
                 setLockedQC(msg.getjustify());
 
                 Debug.debug( "At Node: " + getId() + " Sent Precommit message :" + msg.toString() + " to leader: " + getLeaderId());
@@ -302,7 +333,11 @@ public class HotStuffNode implements APLListener {
 
                 Message decideMsg = new Message(Type.DECIDE, getView(), msg.getNode(), msg.getRequesterId());
 
-                QuorumCertificate highQC = new QuorumCertificate(Type.DECIDE, getView(), msg.getNode(), combineVotes());
+                BigInteger thresholdSig = combineVotes();
+                if (thresholdSig == null) {
+                    return;
+                }
+                QuorumCertificate highQC = new QuorumCertificate(Type.COMMIT, getView(), msg.getNode(), thresholdSig);
                 decideMsg.setJustify(highQC);
 
                 setPendingVoteType(Type.DECIDE);
@@ -316,7 +351,7 @@ public class HotStuffNode implements APLListener {
         if(senderId == getLeaderId() && msg.getPartialSign() == null){
             //TODO: Think aboiut teshdold signs
             if (validateQC(msg.getjustify())) {
-                msg.Vote();
+                msg.vote(localShare);
 
                 Debug.debug( "At Node: " + getId() + " Sent Commit message :" + msg.toString() + " to leader: " + getLeaderId());
                 send(getLeaderId(), msg.serialize());           
@@ -347,22 +382,22 @@ public class HotStuffNode implements APLListener {
     }
     
     private int getLeaderId(){
-        return broadcastTo.get(view%n);
+        return broadcastTo.get(view%numNodes);
     }
 
-    //TODO: do it
-    private byte[] combineVotes(){
-        String combined = "";
-        for (Message m : getVotes().values()){
-            //Debug.debug(m.toString());
-            combined += m.getPartialSign();
+    private BigInteger combineVotes(){
+        int counter = 0;
+        SigShare[] sigShares = new SigShare[thresholdK];
+        for (Message msg : getVotes().values()) {
+            sigShares[counter] = msg.getPartialSign();;
+            counter++;
         }
-        
-        return combined.getBytes();
+
+        return SigShare.combineSigs(sigShares, thresholdK, numNodes, groupKey.getModulus());
     }
 
     private boolean enoughVotes(){
-        return getVotes().size() >= n - f;
+        return getVotes().size() >= thresholdK;
     }
 
     private synchronized void startViewTimer(Message lastMessage) {
@@ -423,10 +458,21 @@ public class HotStuffNode implements APLListener {
     }
 
     public boolean validateQC(QuorumCertificate qc) {
-        //TODO Implement it when threshold sig exists
-        return true;
-    }
+        if (qc == null) {
+            return true;
+        }
+        if (qc.getSignature() == null) {
+            return false;
+        }
 
+        byte[] typeData = qc.getType().name().getBytes(StandardCharsets.UTF_8);
+        byte[] viewData = ByteBuffer.allocate(Integer.BYTES).putInt(qc.getView()).array();
+        byte[] nodeData = qc.getNode().serialize();
+        byte[] data = ByteBuffer.allocate(typeData.length + viewData.length + nodeData.length)
+                        .put(typeData).put(nodeData).put(viewData).array(); 
+
+        return SigShare.verifySig(data, thresholdK, numNodes, groupKey.getModulus(), groupKey.getExponent(), qc.getSignature());
+    }
 
     public QuorumCertificate getPrepareQC(){
         return this.prepareQC;

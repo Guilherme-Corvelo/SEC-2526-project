@@ -1,6 +1,7 @@
 package depchain.consensus;
 
 import java.io.Serializable;
+import java.math.BigInteger;
 import java.util.HexFormat;
 /**
  * ByzantineQuorumCertificate: A Byzantine-fault-tolerant quorum certificate.
@@ -17,9 +18,9 @@ public class QuorumCertificate implements Serializable {
     private Type type;
     private int view;
     private Node node;
-    private byte[] tresholdSig;
+    private BigInteger tresholdSig;
     
-    public QuorumCertificate(Type type, int view, Node node, byte[] tresholdSig) {
+    public QuorumCertificate(Type type, int view, Node node, BigInteger tresholdSig) {
         this.type = type;
         this.view = view;
         this.node = node;
@@ -38,7 +39,7 @@ public class QuorumCertificate implements Serializable {
         return this.node;
     }
 
-    public byte[] getSignature() {
+    public BigInteger getSignature() {
         return this.tresholdSig;
     }
 
@@ -78,7 +79,7 @@ public class QuorumCertificate implements Serializable {
                 return false;
             }
         } else {
-            if (!this.tresholdSig.equals(other.tresholdSig)) {
+            if (this.tresholdSig.equals(other.tresholdSig)) {
                 return false;
             }
         }
@@ -89,6 +90,6 @@ public class QuorumCertificate implements Serializable {
     @Override
     public String toString() {
         return "QuorumCertificate[viewNumber=" + getView() + ", type=" + getType() +
-               ", node=" + getNode().toString() + ", treshsig=" + HexFormat.of().formatHex(getSignature())+ "]";
+               ", node=" + getNode().toString() + ", treshsig=" + HexFormat.of().formatHex(getSignature().toByteArray())+ "]";
     }
 }

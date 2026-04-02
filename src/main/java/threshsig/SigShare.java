@@ -1,5 +1,6 @@
 package threshsig;
 
+import java.io.Serializable;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 
@@ -12,7 +13,7 @@ import java.security.MessageDigest;
  * 
  * @author Steve Weis <sweis@mit.edu>
  */
-public class SigShare {
+public class SigShare implements Serializable{
 
   // Constants and variables
   //............................................................................
@@ -163,19 +164,8 @@ public class SigShare {
       }
     }
 
-    BigInteger w = BigInteger.valueOf(1l);
-
-    for (int i = 0; i < k; i++) {
-      w = w.multiply(sigs[i].getSig().modPow(SigShare.lambda(sigs[i].getId(), sigs, delta), n));
-    }
-
-    // eprime = delta^2*4
-    final BigInteger eprime = delta.multiply(delta).shiftLeft(2);
-
-    w = w.mod(n);
-    final BigInteger xeprime = x.modPow(eprime, n);
-    final BigInteger we = w.modPow(e, n);
-    return (xeprime.compareTo(we) == 0);
+    final BigInteger w = combineSigs(sigs, k, l, n);
+    return verifySig(data, k, l, n, e, w);
   }
 
   /**
@@ -183,7 +173,7 @@ public class SigShare {
    * 
    * @return l!
    */
-  private static BigInteger factorial(final int l) {
+  public static BigInteger factorial(final int l) {
     BigInteger x = BigInteger.valueOf(1l);
     for (int i = 1; i <= l; i++) {
       x = x.multiply(BigInteger.valueOf(i));
@@ -201,7 +191,7 @@ public class SigShare {
    * 
    * @return the Lagarange interpolation of these points at 0
    */
-  private static BigInteger lambda(final int ik, final SigShare[] S,
+  public static BigInteger lambda(final int ik, final SigShare[] S,
       final BigInteger delta) {
     // lambda(id,l) = PI {id!=j, 0<j<=l} (i-j')/(id-j')
     BigInteger value = delta;
@@ -225,6 +215,35 @@ public class SigShare {
   //............................................................................
   private static void debug(final String s) {
     System.err.println("SigShare: " + s);
+  }
+
+  public static BigInteger combineSigs(final SigShare[] sigs, final int k, final int l,
+      final BigInteger n) {
+
+    final BigInteger delta = SigShare.factorial(l);
+
+    BigInteger w = BigInteger.ONE;
+
+    for (int i = 0; i < k; i++) {
+      w = w.multiply(sigs[i].getSig().modPow(SigShare.lambda(sigs[i].getId(), sigs, delta), n));
+    }
+
+    return w.mod(n);
+  }
+
+  public static boolean verifySig(final byte[] data, final int k, final int l, final BigInteger n,
+      final BigInteger e, BigInteger w) {
+
+    final BigInteger delta = SigShare.factorial(l);
+
+    final BigInteger x = (new BigInteger(data)).mod(n);
+
+    final BigInteger eprime = delta.multiply(delta).shiftLeft(2);
+
+    w = w.mod(n);
+    final BigInteger xeprime = x.modPow(eprime, n);
+    final BigInteger we = w.modPow(e, n);
+    return (xeprime.compareTo(we) == 0);
   }
 
 }

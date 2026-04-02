@@ -12,8 +12,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import depchain.Debug;
-
 /**
  * Implementation of Authenticated Perfect Links (APL) using UDP and public-key
  * signatures.

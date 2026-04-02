@@ -5,6 +5,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
 import depchain.blockchain.Transaction;
@@ -101,6 +103,18 @@ public class Node implements Serializable{
             this.proposedTransactions.equals(other.proposedTransactions);
     }
 
+    public byte[] serialize(){
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try {
+            ObjectOutputStream oos = new ObjectOutputStream(bos);
+            oos.writeObject(this);
+            return bos.toByteArray();
+        } catch (Exception e) {
+            System.err.println("Failed to serialize msg");
+        }
+        return null;
+    }
+    
     @Override
     public String toString() {
         return "Node[proposedTransactions=" + proposedTransactions + 
