@@ -1,16 +1,23 @@
 package depchain.crypto;
 
 import java.io.*;
+import java.math.BigInteger;
 import java.nio.file.*;
 import java.security.*;
 import java.security.spec.*;
 import java.util.HashMap;
 import java.util.Map;
 
+import threshsig.Dealer;
+import threshsig.GroupKey;
+import threshsig.KeyShare;
+import threshsig.SigShare;
+
 public class KeyVault {
     
     public static final String PRIVATE_KEYS_DIR = "privateKeys/";
     public static final String PUBLIC_KEYS_DIR = "publicKeys/";
+    public static final String THRESHOLD_KEYS_DIR = "thresholdKeys/";
     public static final int KEY_SIZE = 2048;
     public static final String ALGORITHM = "RSA";
 
@@ -136,5 +143,121 @@ public class KeyVault {
         KeyFactory factory = KeyFactory.getInstance(ALGORITHM);
 
         return factory.generatePublic(spec);
+    }
+
+    public static void generateAndSaveThresholdKeys(int k, int n, int keyBits) throws Exception {
+        Files.createDirectories(Paths.get(THRESHOLD_KEYS_DIR));
+
+        Dealer dealer = new Dealer(keyBits);
+        dealer.generateKeys(k, n);
+
+        GroupKey groupKey = dealer.getGroupKey();
+        KeyShare[] shares = dealer.getShares();
+
+        saveGroupKey(k, n, groupKey);
+
+        for (int i = 0; i < shares.length; i++) {
+            saveThresholdShare(k, n, i, shares[i]);
+        }
+    }
+
+    public static boolean thresholdKeysExist(int k, int n) {
+        if (!Files.exists(Paths.get(groupKeyPath(k, n)))) {
+            return false;
+        }
+
+        for (int i = 0; i < n; i++) {
+            if (!Files.exists(Paths.get(sharePath(k, n, i)))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static GroupKey loadGroupKey(int k, int n) throws Exception {
+        byte[] bytes = Files.readAllBytes(Paths.get(groupKeyPath(k, n)));
+
+        try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes))) {
+            int loadedK = in.readInt();
+            int loadedL = in.readInt();
+            GroupKey groupKey = new GroupKey(
+                loadedK,
+                loadedL,
+                0,
+                BigInteger.ZERO,
+                readBigInteger(in),
+                readBigInteger(in)
+            );
+
+            return groupKey;
+        }
+    }
+
+    public static KeyShare[] loadThresholdShares(int k, int n, GroupKey groupKey) throws Exception {
+        KeyShare[] shares = new KeyShare[n];
+        BigInteger delta = SigShare.factorial(groupKey.getL());
+
+        for (int i = 0; i < n; i++) {
+            byte[] bytes = Files.readAllBytes(Paths.get(sharePath(k, n, i)));
+            try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes))) {
+                int id = in.readInt();
+                BigInteger secret = readBigInteger(in);
+                BigInteger verifier = readBigInteger(in);
+                BigInteger groupVerifier = readBigInteger(in);
+
+                KeyShare share = new KeyShare(id, secret, groupKey.getModulus(), delta);
+                share.setVerifiers(verifier, groupVerifier);
+                shares[i] = share;
+            }
+        }
+
+        return shares;
+    }
+
+    private static void saveGroupKey(int k, int n, GroupKey groupKey) throws Exception {
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+             DataOutputStream out = new DataOutputStream(bos)) {
+            out.writeInt(k);
+            out.writeInt(n);
+            writeBigInteger(out, groupKey.getExponent());
+            writeBigInteger(out, groupKey.getModulus());
+            out.flush();
+
+            Files.write(Paths.get(groupKeyPath(k, n)), bos.toByteArray());
+        }
+    }
+
+    private static void saveThresholdShare(int k, int n, int index, KeyShare share) throws Exception {
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+             DataOutputStream out = new DataOutputStream(bos)) {
+            out.writeInt(share.getId());
+            writeBigInteger(out, share.getSecret());
+            writeBigInteger(out, share.getVerifier());
+            writeBigInteger(out, share.getGroupVerifier());
+            out.flush();
+
+            Files.write(Paths.get(sharePath(k, n, index)), bos.toByteArray());
+        }
+    }
+
+    private static void writeBigInteger(DataOutputStream out, BigInteger number) throws Exception {
+        byte[] bytes = number.toByteArray();
+        out.writeInt(bytes.length);
+        out.write(bytes);
+    }
+
+    private static BigInteger readBigInteger(DataInputStream in) throws Exception {
+        int length = in.readInt();
+        byte[] bytes = in.readNBytes(length);
+        return new BigInteger(bytes);
+    }
+
+    private static String groupKeyPath(int k, int n) {
+        return THRESHOLD_KEYS_DIR + "group-k" + k + "-n" + n + ".key";
+    }
+
+    private static String sharePath(int k, int n, int index) {
+        return THRESHOLD_KEYS_DIR + "share-k" + k + "-n" + n + "-idx" + index + ".key";
     }
 }

@@ -87,6 +87,10 @@ public class KeyShare {
     return verifier;
   }
 
+  public BigInteger getGroupVerifier() {
+    return groupVerifier;
+  }
+
   public BigInteger getSignVal() {
     return signVal;
   }

@@ -2,10 +2,9 @@ package depchain.consensus;
 
 import java.util.Arrays;
 
-import threshsig.Dealer;
+import depchain.crypto.KeyVault;
 import threshsig.GroupKey;
 import threshsig.KeyShare;
-import threshsig.ThresholdSigException;
 
 
 class ThresholdContext {
@@ -15,12 +14,14 @@ class ThresholdContext {
     
     public ThresholdContext(int k, int n) {
         try {
-            Dealer dealer = new Dealer(THRESHOLD_KEY_BITS);
-            dealer.generateKeys(k, n);
-            this.groupKey = dealer.getGroupKey();
-            this.shares = Arrays.copyOf(dealer.getShares(), dealer.getShares().length);
+            if (!KeyVault.thresholdKeysExist(k, n)) {
+                KeyVault.generateAndSaveThresholdKeys(k, n, THRESHOLD_KEY_BITS);
+            }
 
-        } catch (ThresholdSigException e) {
+            this.groupKey = KeyVault.loadGroupKey(k, n);
+            this.shares = Arrays.copyOf(KeyVault.loadThresholdShares(k, n, this.groupKey), n);
+
+        } catch (Exception e) {
             throw new IllegalStateException("Failed to initialize threshold signature keys", e); 
         }
     }

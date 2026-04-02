@@ -88,7 +88,6 @@ public class ThreshTest{
         .verify(b, sigs, K, L, gk.getModulus(), gk.getExponent()));
   }
 
-  
   @Test
   public void testVerifyBadSignature() {
     b = "corrupt data".getBytes();
