@@ -1,15 +1,23 @@
-package threshsig;
-/* 
-import static junit.framework.Assert.assertFalse;
-import static junit.framework.Assert.assertTrue;
+package depchain.integration;
 
-import junit.framework.TestCase;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import threshsig.Dealer;
+import threshsig.GroupKey;
+import threshsig.KeyShare;
+import threshsig.SigShare;
+import threshsig.ThresholdSigException;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Random;
 
-public class ThreshTest extends TestCase {
+public class ThreshTest{
   private static final int KEYSIZE = 512;
   private static final int K = 6;
   private static final int L = 13;
@@ -20,7 +28,7 @@ public class ThreshTest extends TestCase {
   private static byte[] b;
   private static final SigShare[] sigs = new SigShare[K];
 
-  @Override
+  @BeforeEach
   protected void setUp() {
     (new Random()).nextBytes(data);
     try {
@@ -53,6 +61,7 @@ public class ThreshTest extends TestCase {
     keys = d.getShares();
   }
 
+  @Test
   public void testVerifySignatures() {
     System.out.println("Attempting to verify a valid set of signatures...");
     // Pick a set of shares to attempt to verify
@@ -66,6 +75,7 @@ public class ThreshTest extends TestCase {
         .verify(b, sigs, K, L, gk.getModulus(), gk.getExponent()));
   }
 
+  @Test
   public void testVerifySignaturesAgain() {
     System.out.println("Attempting to verify a different set of shares...");
 
@@ -78,13 +88,19 @@ public class ThreshTest extends TestCase {
         .verify(b, sigs, K, L, gk.getModulus(), gk.getExponent()));
   }
 
+  
+  @Test
   public void testVerifyBadSignature() {
     b = "corrupt data".getBytes();
     sigs[3] = keys[3].sign(b);
-    assertFalse(SigShare.verify(b, sigs, K, L, gk.getModulus(), gk
-        .getExponent()));
+
+    assertThrows(ThresholdSigException.class,
+        () ->     SigShare.verify(b, sigs, K, L, gk.getModulus(), gk
+        .getExponent())
+    );
   }
   
+  @Test
   public void testPerformance() {
     final int RUNS = 20;
     final int[] S = { 3, 5, 1, 2, 10, 7 };
@@ -108,4 +124,3 @@ public class ThreshTest extends TestCase {
         + elapsed + " Average: " + (float) (elapsed / RUNS));
   }
 }
-*/
