@@ -4,16 +4,23 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.File;
 import java.net.InetSocketAddress;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PublicKey;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import depchain.blockchain.Transaction;
@@ -27,6 +34,15 @@ class ClientHotStuffExecutionResultIntegrationTest {
     private HotStuffNode node1;
     private HotStuffNode node2;
     private HotStuffNode node3;
+
+    @BeforeEach
+    void setup(){
+        HotStuffNode.resetThresholdContext();
+    }
+    @AfterEach
+    void cleanup() throws Exception{
+        deleteDir();
+    }
 
     @Test
     void clientRequestEventuallyReturnsExecutionResultWithRealHotStuffNodes() throws Exception {
@@ -92,4 +108,16 @@ class ClientHotStuffExecutionResultIntegrationTest {
         String hex = address.startsWith("0x") ? address.substring(2) : address;
         return "0".repeat(64 - hex.length()) + hex;
     }
+
+    public static void deleteDir() throws Exception {
+        if (!Files.exists(Paths.get("thresholdKeys/"))) {
+            return;
+        }
+            
+        Files.walk(Paths.get("thresholdKeys/"))
+                .sorted(Comparator.reverseOrder())
+                .map(Path::toFile)
+                .forEach(File::delete);
+    }
+
 }

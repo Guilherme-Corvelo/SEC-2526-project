@@ -1,16 +1,20 @@
-package depchain.aa_integration;
+package depchain.integration;
 
 import depchain.blockchain.Block;
 import depchain.blockchain.BlockStorage;
 import depchain.blockchain.Transaction;
 import depchain.client.Client;
 import depchain.consensus.HotStuffNode;
+
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PublicKey;
@@ -51,6 +55,7 @@ public class ClientBlockchainIntegrationTest {
 
     @BeforeEach
     void setup() throws Exception {
+        HotStuffNode.resetThresholdContext();
         cleanupNodeBlocks(NODE_1_ID);
         cleanupNodeBlocks(NODE_2_ID);
         cleanupNodeBlocks(NODE_3_ID);
@@ -86,6 +91,11 @@ public class ClientBlockchainIntegrationTest {
         node1 = new HotStuffNode(NODE_1_ID, NODE_1_PORT, allAddresses, keysNode1.getPrivate(), publicKeys, F, broadcastTo);
         node2 = new HotStuffNode(NODE_2_ID, NODE_2_PORT, allAddresses, keysNode2.getPrivate(), publicKeys, F, broadcastTo);
         node3 = new HotStuffNode(NODE_3_ID, NODE_3_PORT, allAddresses, keysNode3.getPrivate(), publicKeys, F, broadcastTo);
+    }
+
+    @AfterEach
+    void cleanup() throws Exception{
+        deleteDir();
     }
 
     @Test
@@ -150,4 +160,15 @@ public class ClientBlockchainIntegrationTest {
                 }
             });
     }
+    public static void deleteDir() throws Exception {
+        if (!Files.exists(Paths.get("thresholdKeys/"))) {
+            return;
+        }
+            
+        Files.walk(Paths.get("thresholdKeys/"))
+                .sorted(Comparator.reverseOrder())
+                .map(Path::toFile)
+                .forEach(File::delete);
+    }
+
 }

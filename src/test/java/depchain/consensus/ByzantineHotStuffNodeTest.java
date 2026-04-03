@@ -12,16 +12,21 @@ import org.junit.jupiter.api.TestMethodOrder;
 import threshsig.KeyShare;
 import threshsig.SigShare;
 
+import java.io.File;
 import java.lang.reflect.Field;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -38,16 +43,18 @@ public class ByzantineHotStuffNodeTest {
     @BeforeEach
     void setup() {
         createdApls.clear();
+        HotStuffNode.resetThresholdContext();
     }
 
     @AfterEach
-    void teardown() {
+    void teardown() throws Exception{
         for (APL apl : createdApls) {
             try {
                 apl.stop();
             } catch (Exception ignored) {
             }
         }
+        deleteDir();
     }
 
     @Test
@@ -111,7 +118,7 @@ public class ByzantineHotStuffNodeTest {
     @Order(5)
     @DisplayName("Ignore messages with wrong view number")
     void ignoreMessagesFromWrongView() throws Exception {
-        HotStuffNode node = createNode(0, 1, 25500, 1);
+        HotStuffNode node = createNode(0, 1, 25500, 0);
 
         Message staleMessage = new Message(Type.NEWVIEW, 99, new Node(), 123);
         node.onMessage(0, staleMessage.serialize());
@@ -248,5 +255,16 @@ public class ByzantineHotStuffNodeTest {
         Field field = Message.class.getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(msg, value);
+    }
+
+    public static void deleteDir() throws Exception {
+        if (!Files.exists(Paths.get("thresholdKeys/"))) {
+            return;
+        }
+            
+        Files.walk(Paths.get("thresholdKeys/"))
+                .sorted(Comparator.reverseOrder())
+                .map(Path::toFile)
+                .forEach(File::delete);
     }
 }

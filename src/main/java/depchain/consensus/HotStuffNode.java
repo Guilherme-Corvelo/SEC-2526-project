@@ -92,6 +92,13 @@ public class HotStuffNode implements APLListener {
         }
     }
 
+    // For testing
+    public static void resetThresholdContext() {
+        synchronized (ThresholdContext.class) {
+            THRESHOLD_CONTEXT = null;
+        }
+    }
+
     public void onMessage(int senderId, byte[] payload){
         Message message = Message.deserialize(payload);
         if (message != null) {
