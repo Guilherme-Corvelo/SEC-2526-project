@@ -367,7 +367,7 @@ public class HotStuffNode implements APLListener {
         //TODO: Think aboiut teshdold signs
         //TODO: (VALIDATE QC???)
         latestNode = msg.getNode();
-        blockProcessor.processBlock(latestNode.getProposedTransactions());
+        msg.setExecutionResults(blockProcessor.processBlockWithResults(latestNode.getProposedTransactions()));
 
         Debug.debug( "At Node: " + getId() + " Sent Decide message :" + msg.toString() + "to client " + msg.getRequesterId());
 

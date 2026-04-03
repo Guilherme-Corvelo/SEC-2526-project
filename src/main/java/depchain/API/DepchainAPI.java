@@ -21,6 +21,7 @@ public class DepchainAPI implements APLListener{
     private Set<Integer> receivedResponses = new HashSet<>();
     private int f;
     private final Object lock = new Object();
+    private Message latestResponse = null;
 
     public DepchainAPI(int id, 
                     int port, Map<Integer, InetSocketAddress> addresses,
@@ -48,6 +49,9 @@ public class DepchainAPI implements APLListener{
     public void handleResponse(int senderId, Message Message){
         synchronized(lock) {
             receivedResponses.add(senderId);
+            if (latestResponse == null) {
+                latestResponse = Message;
+            }
             Debug.debug("API RECEIVED: " + receivedResponses.size() + " " + Message.toString());
 
             if (receivedResponses.size() >= this.f + 1) {
@@ -57,9 +61,10 @@ public class DepchainAPI implements APLListener{
         
     }
 
-    public void append(Transaction transaction) {
+    public Message append(Transaction transaction) {
         synchronized(lock) {
             this.receivedResponses.clear();
+            this.latestResponse = null;
 
             Request request = new Request(transaction);
             broadcast(request.serialize());
@@ -71,13 +76,14 @@ public class DepchainAPI implements APLListener{
                 } catch (Exception e) {
                     // TODO: handle exception
                     Thread.currentThread().interrupt();
-                    return;
+                    return null;
                 }
             }
 
         }
 
         System.out.println("Transaction was appended successfully");
+        return latestResponse;
     }
 
     public void send(int receiverId, byte[] msg){

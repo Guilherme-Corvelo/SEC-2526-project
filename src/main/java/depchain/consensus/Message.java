@@ -9,7 +9,9 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.List;
 
+import depchain.blockchain.ExecutionResult;
 import threshsig.KeyShare;
 import threshsig.SigShare;
 
@@ -19,6 +21,7 @@ public class Message implements Serializable{
     private Node node;
     private QuorumCertificate justify = null;
     private SigShare partialSign = null;
+    private List<ExecutionResult> executionResults = null;
 
     private int requesterId;
 
@@ -86,6 +89,14 @@ public class Message implements Serializable{
         return this.requesterId;
     }
 
+    public List<ExecutionResult> getExecutionResults() {
+        return this.executionResults;
+    }
+
+    public void setExecutionResults(List<ExecutionResult> executionResults) {
+        this.executionResults = executionResults;
+    }
+
     public byte[] serialize(){
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         try {
@@ -144,6 +155,14 @@ public class Message implements Serializable{
             }
         }
 
+        if (this.executionResults == null) {
+            if (other.executionResults != null) {
+                return false;
+            }
+        } else if (!this.executionResults.equals(other.executionResults)) {
+            return false;
+        }
+
         return true;
     }
 
@@ -151,6 +170,7 @@ public class Message implements Serializable{
     public String toString() {
         return "Message[viewNumber=" + viewNumber + ", type=" + type +
                ", node=" + node.toString() + ", justify=" + (justify != null ? justify.toString() : "null") +
-               ", partialSign=" + (partialSign != null ? HexFormat.of().formatHex(partialSign.getBytes()) : "null") + "]";
+               ", partialSign=" + (partialSign != null ? HexFormat.of().formatHex(partialSign.getBytes()) : "null") +
+               ", executionResults=" + (executionResults != null ? executionResults.toString() : "null") + "]";
     }
 }

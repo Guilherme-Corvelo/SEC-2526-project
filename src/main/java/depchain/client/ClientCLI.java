@@ -6,6 +6,8 @@ import java.util.Scanner;
 
 import depchain.crypto.KeyVault;
 import depchain.blockchain.Transaction;
+import depchain.blockchain.ExecutionResult;
+import depchain.consensus.Message;
 import java.security.*;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
@@ -354,8 +356,33 @@ public class ClientCLI {
 
     private void submit(Transaction transaction) throws Exception{
         transaction.sign(privateKey);
-        client.send(transaction);
+        Message response = client.send(transaction);
+        printExecutionResult(response, transaction);
         nonce++;
+    }
+
+    private void printExecutionResult(Message response, Transaction transaction) {
+        if (response == null || response.getExecutionResults() == null || response.getExecutionResults().isEmpty()) {
+            System.out.println("No execution result was returned by the service.");
+            return;
+        }
+
+        int txIndex = -1;
+        if (response.getNode() != null && response.getNode().getProposedTransactions() != null) {
+            txIndex = response.getNode().getProposedTransactions().indexOf(transaction);
+        }
+
+        ExecutionResult result;
+        if (txIndex >= 0 && txIndex < response.getExecutionResults().size()) {
+            result = response.getExecutionResults().get(txIndex);
+        } else {
+            result = response.getExecutionResults().get(0);
+        }
+
+        System.out.println("Execution result:");
+        System.out.println("  success: " + result.success);
+        System.out.println("  gasUsed: " + result.gasUsed);
+        System.out.println("  returnValue: " + result.returnValue);
     }
 
     private String padAddress(String address) {

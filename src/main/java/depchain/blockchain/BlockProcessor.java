@@ -9,6 +9,7 @@ import depchain.Debug;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.List;
 
@@ -133,16 +134,26 @@ public class BlockProcessor {
     }
 
     public Block processBlock(List<Transaction> decidedTransactions) {
+        return processBlockInternal(decidedTransactions).block;
+    }
 
+    public List<ExecutionResult> processBlockWithResults(List<Transaction> decidedTransactions) {
+        return processBlockInternal(decidedTransactions).executionResults;
+    }
+
+    private ProcessedBlockOutcome processBlockInternal(List<Transaction> decidedTransactions) {
         List<Transaction> ordered = new ArrayList<>(decidedTransactions);
         ordered.sort(Comparator.comparingLong(Transaction::getGasPrice).reversed());
 
         List<Transaction> executed = new ArrayList<>();
+        Map<Transaction, ExecutionResult> executionResultsByTransaction = new IdentityHashMap<>();
+        ExecutionResult droppedResult = new ExecutionResult(false, 0, BigInteger.ZERO);
 
         for (Transaction transaction : ordered) {
 
             if (!isValid(transaction)) {
                 System.out.println("Dropping invalid transaction from: " + transaction.getFrom());
+                executionResultsByTransaction.put(transaction, droppedResult);
                 continue;
             }
 
@@ -151,10 +162,12 @@ public class BlockProcessor {
 
             if (evm.getBalance(sender).toLong() < maxFee) {
                 System.out.println("Dropping transaction - insufficient gas funds: " + transaction.getFrom());
+                executionResultsByTransaction.put(transaction, droppedResult);
                 continue;
             }
 
             ExecutionResult result = execute(transaction, sender);
+            executionResultsByTransaction.put(transaction, result);
 
             evm.deductGasFee(sender, transaction.getGasPrice(), transaction.getGasLimit(), result.gasUsed);
             evm.incrementNonce(sender);
@@ -182,7 +195,12 @@ public class BlockProcessor {
 
         Debug.debug(" Block " + newBlockNumber + " - " + executed.size() + " transactions.");
 
-        return newBlock;
+        List<ExecutionResult> executionResults = new ArrayList<>();
+        for (Transaction transaction : decidedTransactions) {
+            executionResults.add(executionResultsByTransaction.getOrDefault(transaction, droppedResult));
+        }
+
+        return new ProcessedBlockOutcome(newBlock, executionResults);
     }
 
     private ExecutionResult execute(Transaction transaction, Address sender) {
