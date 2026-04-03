@@ -90,7 +90,13 @@ public class ClientCLI {
         }
 
         Client client = new Client(clientId, clientPort, SERVER_ADDRESSES, privateKey, publicKeys, F);
-        ClientCLI cli = new ClientCLI(myAddress, privateKey, publicKeys.get(clientId), IST_COIN_ADDRESS, 0, client);
+        ClientCLI cli = null;
+        if(clientId==0){
+            cli = new ClientCLI(myAddress, privateKey, publicKeys.get(clientId), IST_COIN_ADDRESS, 1, client);
+        }
+        else{
+            cli = new ClientCLI(myAddress, privateKey, publicKeys.get(clientId), IST_COIN_ADDRESS, 0, client);
+        }
 
         cli.run();
     }
