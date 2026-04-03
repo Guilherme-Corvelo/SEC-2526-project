@@ -78,6 +78,10 @@ public class Transaction implements Serializable{
         return to != null && value > 0 && (input == null || input.isEmpty());
     }
 
+    public boolean isDepCoinBalanceQuery() {
+        return to != null && value == 0 && (input == null || input.isEmpty());
+    }
+
     public String getFrom() {
         return from;
     }

@@ -155,9 +155,13 @@ public class ClientCLI {
                 requireArgs(parts, 4, "depcoin transfer <to_address> <amount>");
                 handleDepCoinTransfer(parts);
                 break;
+            case "balance":
+                requireArgs(parts, 3, "depcoin balance <address>");
+                handleDepCoinBalance(parts);
+                break;
         
             default:
-                System.out.println("Unknown depcoin command. Available: transfer");
+                System.out.println("Unknown depcoin command. Available: transfer, balance");
                 break;
         }
 
@@ -174,6 +178,13 @@ public class ClientCLI {
         System.out.println("  To:     " + to);
         System.out.println("  Amount: " + amount);
         System.out.println("  From:   " + myAddress);
+    }
+
+    private void handleDepCoinBalance(String[] parts) throws Exception {
+        String address = parts[2];
+        Transaction transaction = buildDepCoinBalanceQuery(address);
+        submit(transaction);
+        System.out.println("DepCoin balance query submitted for: " + address);
     }
 
     private void handleIST(String command, String[] parts) throws Exception {
@@ -350,6 +361,19 @@ public class ClientCLI {
         return new Transaction(myAddress, to, null, amount, nonce, defaultGasPrice, defaultGasLimit, publicKey);
     }
 
+    private Transaction buildDepCoinBalanceQuery(String address) {
+        return new Transaction(
+            myAddress,
+            address,
+            null,
+            0,
+            nonce,
+            defaultGasPrice,
+            defaultGasLimit,
+            publicKey
+        );
+    }
+
     private Transaction buildContractCall(String callData) {
         return new Transaction(myAddress, istCoinAddress, callData, 0, nonce, defaultGasPrice, defaultGasLimit, publicKey);
     }
@@ -398,6 +422,7 @@ public class ClientCLI {
 
         System.out.println("|  NATIVE DEPCOIN                              |");
         System.out.println("|    depcoin transfer <to_address> <amount>    |");
+        System.out.println("|    depcoin balance <address>                  |");
         System.out.println("|                                              |");
         System.out.println("|  IST COIN (ERC-20)                           |");
         System.out.println("|    ist total-supply                          |");

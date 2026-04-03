@@ -205,7 +205,9 @@ public class BlockProcessor {
 
     private ExecutionResult execute(Transaction transaction, Address sender) {
 
-        if (transaction.isContractCall()) {
+        if (transaction.isDepCoinBalanceQuery()) {
+            return evm.getDepCoinBalance(Address.fromHexString(transaction.getTo()));
+        } else if (transaction.isContractCall()) {
             return evm.callContract(sender, Address.fromHexString(CONTRACT_ADDRESS), Bytes.fromHexString(transaction.getInput()));
         } else if (transaction.isDepCoinTransfer()) {
             return evm.transferDepCoin(sender, Address.fromHexString(transaction.getTo()), Wei.of(transaction.getValue()));

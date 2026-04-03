@@ -235,6 +235,15 @@ public class EVMExecutorService {
         return new ExecutionResult(true, 21000, BigInteger.ZERO);
     }
 
+    public ExecutionResult getDepCoinBalance(Address address) {
+        MutableAccount account = (MutableAccount) worldState.get(address);
+        if (account == null) {
+            return new ExecutionResult(false, 0, BigInteger.ZERO);
+        }
+
+        return new ExecutionResult(true, 0, account.getBalance().toBigInteger());
+    }
+
     public void deductGasFee(Address sender, long gasPrice, long gasLimit, long gasUsed) {
 
         long fee = gasPrice * Math.min(gasLimit, gasUsed);

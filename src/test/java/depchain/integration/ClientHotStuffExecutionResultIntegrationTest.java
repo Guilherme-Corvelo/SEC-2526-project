@@ -69,10 +69,22 @@ class ClientHotStuffExecutionResultIntegrationTest {
         node2 = new HotStuffNode(2, portNode2, allAddresses, node2Keys.getPrivate(), publicKeys, f, replicaIds);
         node3 = new HotStuffNode(3, portNode3, allAddresses, node3Keys.getPrivate(), publicKeys, f, replicaIds);
 
+        /*
         Transaction tx = new Transaction(
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "1234567891234567891234567891234567891234",
             "70a08231"+ padAddress("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            0,
+            1,
+            1,
+            21_000,
+            clientKeys.getPublic()
+            );
+            */
+        Transaction tx = new Transaction(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            null,
             0,
             1,
             1,
