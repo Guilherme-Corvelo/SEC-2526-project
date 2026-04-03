@@ -263,7 +263,6 @@ public class HotStuffNode implements APLListener {
         if(senderId == getLeaderId() && msg.getPartialSign() == null){
             if (msg.getNode().canExtend(msg) &&
                 safeNode(msg.getNode(), msg.getjustify())){
-
                 if (validateQC(msg.getjustify())) {
                     setPrepareQC(msg.getjustify());
                     msg.vote(localShare);
@@ -340,7 +339,7 @@ public class HotStuffNode implements APLListener {
                 QuorumCertificate highQC = new QuorumCertificate(Type.COMMIT, getView(), msg.getNode(), thresholdSig);
                 decideMsg.setJustify(highQC);
 
-                setPendingVoteType(Type.DECIDE);
+                setPendingVoteType(Type.NEWVIEW);
                 getVotes().clear();
 
                 Debug.debug( "Leader: " + getId() + " Broadcast Decide message :" + decideMsg.toString());
@@ -366,14 +365,17 @@ public class HotStuffNode implements APLListener {
     public void handleDecideMessage(int senderId, Message msg){
         //TODO: Think aboiut teshdold signs
         //TODO: (VALIDATE QC???)
-        latestNode = msg.getNode();
-        msg.setExecutionResults(blockProcessor.processBlockWithResults(latestNode.getProposedTransactions()));
+        if (validateQC(msg.getjustify())) {
+            latestNode = msg.getNode();
+            msg.setExecutionResults(blockProcessor.processBlockWithResults(latestNode.getProposedTransactions()));
 
-        Debug.debug( "At Node: " + getId() + " Sent Decide message :" + msg.toString() + "to client " + msg.getRequesterId());
+            Debug.debug( "At Node: " + getId() + " Sent Decide message :" + msg.toString() + "to client " + msg.getRequesterId());
 
-        send(msg.getRequesterId(), msg.serialize());        
+            send(msg.getRequesterId(), msg.serialize());
 
-        if (getId() != getLeaderId()){ setPendingVoteType(Type.NEWVIEW);}
+            if (getId() != getLeaderId()){ setPendingVoteType(Type.NEWVIEW);}
+            this.view++;
+        }
     }
 
     //Think about quorum certificate not starting at null, having qc initialized with genesis node

@@ -46,7 +46,7 @@ public class ClientCLI {
     private final Client client;
     private long nonce;
     private long defaultGasPrice = 1;
-    private long defaultGasLimit = 100_000;
+    private long defaultGasLimit = 1000;
 
     public ClientCLI(String myAddress, PrivateKey privateKey, PublicKey publicKey, String istCoinAddress,
                      long initialNonce, Client client) {
