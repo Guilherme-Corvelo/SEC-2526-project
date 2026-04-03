@@ -11,6 +11,8 @@ import depchain.consensus.Message;
 import java.security.*;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 public class ClientCLI {
 
@@ -22,6 +24,7 @@ public class ClientCLI {
     static final String ID_TRANSFER_FROM = "23b872dd";
     static final String ID_INCREASE_ALLOWANCE = "39509351";
     static final String ID_DECREASE_ALLOWANCE = "a457c2d7";
+    static final String NONCE_DIR = "nonces/";
 
     private static final String IST_COIN_ADDRESS = "1234567891234567891234567891234567891234";
     private static final int F = 1;
@@ -47,9 +50,10 @@ public class ClientCLI {
     private long nonce;
     private long defaultGasPrice = 1;
     private long defaultGasLimit = 1000;
+    private int clientId;
 
     public ClientCLI(String myAddress, PrivateKey privateKey, PublicKey publicKey, String istCoinAddress,
-                     long initialNonce, Client client) {
+                     long initialNonce, Client client, int clientId) {
     
         this.myAddress = myAddress;
         this.privateKey = privateKey;
@@ -57,6 +61,7 @@ public class ClientCLI {
         this.istCoinAddress = istCoinAddress;
         this.nonce = initialNonce;
         this.client = client;
+        this.clientId = clientId;
     }
 
     public static void main(String[] args) throws Exception {
@@ -88,14 +93,14 @@ public class ClientCLI {
             System.err.println("Unknown clientId: " + clientId);
             System.exit(1);
         }
-
+        long nonce  = loadNonce(clientId);
         Client client = new Client(clientId, clientPort, SERVER_ADDRESSES, privateKey, publicKeys, F);
         ClientCLI cli = null;
         if(clientId==0){
-            cli = new ClientCLI(myAddress, privateKey, publicKeys.get(clientId), IST_COIN_ADDRESS, 1, client);
+            cli = new ClientCLI(myAddress, privateKey, publicKeys.get(clientId), IST_COIN_ADDRESS, nonce, client, clientId);
         }
         else{
-            cli = new ClientCLI(myAddress, privateKey, publicKeys.get(clientId), IST_COIN_ADDRESS, 0, client);
+            cli = new ClientCLI(myAddress, privateKey, publicKeys.get(clientId), IST_COIN_ADDRESS, nonce, client, clientId);
         }
 
         cli.run();
@@ -389,6 +394,43 @@ public class ClientCLI {
         Message response = client.send(transaction);
         printExecutionResult(response, transaction);
         nonce++;
+        saveNonce(this.clientId);
+    }
+
+    private void saveNonce(int i){
+        try {
+            Files.writeString(Paths.get(NONCE_DIR + "client" + i + ".txt"), Long.toString(this.nonce));
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
+    }
+
+    private static long loadNonce(int i){
+        if (nonceExists(i)){
+            try {
+                return Long.parseLong(Files.readString(Paths.get(NONCE_DIR + "client" + i + ".txt")));
+            } catch (Exception e) {
+                System.err.println(e.getMessage());
+            }
+        }
+        return initializeNonce(i);
+    }
+
+    private static boolean nonceExists(int i){
+        return Files.exists(Paths.get(NONCE_DIR + "client" + i + ".txt"));
+    }
+
+    private static long initializeNonce(int i){
+        long nonce = 0;
+        try {
+            if (i == 0){
+                nonce = 1;
+            }
+            Files.createDirectories(Paths.get(NONCE_DIR));
+            Files.writeString(Paths.get(NONCE_DIR + "client" + i + ".txt"), Long.toString(nonce));
+        } catch (Exception e) {System.err.println(e.getMessage());}
+
+        return nonce;
     }
 
     private void printExecutionResult(Message response, Transaction transaction) {
