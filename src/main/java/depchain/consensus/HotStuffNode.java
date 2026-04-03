@@ -27,8 +27,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * HotStuffNode: A replica in the Byzantine Fault Tolerant HotStuff consensus protocol.
- *
- * Implements HotStuff with cryptographic signatures and Byzantine quorum certificates.
  */
 public class HotStuffNode implements APLListener {
 

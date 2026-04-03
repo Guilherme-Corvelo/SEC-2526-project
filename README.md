@@ -1,95 +1,97 @@
-# SEC-2526-project
-SEC 25/26 project
+# DepChain (SEC 25/26 Project)
 
-## Phase 1: Byzantine Consensus
+DepChain is a Java/Maven project that combines:
+- a Byzantine fault-tolerant consensus layer that uses the algotithm HotStuff,
+- a networking layer with authenticated point-to-point messaging,
+- a blockchain execution/storage layer,
+- a client CLI used to submit transactions and queries.
 
-This repository contains the implementation of DepChain, a permissioned blockchain system built iteratively.
+## Project structure
 
-**Phase 1 (Consensus Only)** focuses on the consensus layer with the Byzantine HotStuff algorithm.
+```text
+src/main/java/
+├── depchain/
+│   ├── API/           # Request/API-facing types
+│   ├── blockchain/    # Blocks, transactions, execution, storage
+│   ├── client/        # Client runtime + interactive CLI
+│   ├── consensus/     # Node logic, message/QC types, server bootstrap
+│   ├── crypto/        # Key generation/loading utilities
+│   └── network/       # APL transport abstractions and messages
+└── threshsig/         # Threshold signature primitives/helpers
 
-### Completed Steps
+src/test/java/depchain/
+├── blockchain/        # Block, tx, processor, integration tests
+├── consensus/         # Byzantine/HotStuff node tests
+├── contract/          # ISTCoin-related tests
+├── integration/       # End-to-end multi-component integration tests
+├── network/           # APL/network serialization tests
+```
 
-1. **Step 1: HotStuff Algorithm Design**
-   - Understanding and designing the HotStuff consensus algorithm
-   - Leader-based multi-phase consensus with safety and liveness guarantees
+Other important directories:
+- `privateKeys/`, `publicKeys/`: node/client RSA keys.
+- `thresholdKeys/`: generated threshold signature key material.
+- `genesis.json`, `ISTCoin.sol`: chain/contract artifacts used by the project.
+- `nonces/`: client nonces for client persistence.
 
-2. **Step 2: Authenticated Perfect Links (APL)**
-   - Reliable, authenticated point-to-point communication over UDP
-   - Message authentication via HMAC-SHA256
-   - Automatic retransmission on timeout
+## Build and run tests
 
-3. **Step 3: HotStuffNode (Crash-Tolerant)**
-   - Basic implementation of HotStuff with f crash-faults tolerance (f < n/3)
-   - Handles prepare, pre-commit, and commit phases
-   - Maintains view history and performs view changes
-
-4. **Step 4: Timeout Failure Detector**
-   - Detects crash failures via timeout-based mechanism
-   - Triggers view changes when leader is suspected dead
-   - Integrates with HotStuffNode for resilience
-
-5. **Step 5: Byzantine HotStuffNode**
-   - Full Byzantine-Fault-Tolerant consensus (tolerating f = 1 Byzantine fault with n = 4)
-   - **Cryptographic protections:**
-     - RSA-SHA256 signatures on all votes
-     - Signature verification in QC validation
-     - Equivocation detection (preventing double-voting in same view)
-     - View numbers included in signatures (replay prevention)
-     - Proper 2f+1 Byzantine quorum enforcement (3 out of 4)
-   - **10 comprehensive tests validating all 5 attack vectors:**
-     - ✓ Forged vote rejection
-     - ✓ Byzantine quorum enforcement  
-     - ✓ Fake message rejection
-     - ✓ Equivocation detection
-     - ✓ Replay attack prevention
-
-6. **Step 6: Client Library & Append-Only Blockchain Structure**
-   - **ServiceClient**: Minimal fire-and-forget client for submitting strings
-   - **Block**: Simple data container for consensus blocks
-   - **AppendOnlyLog**: In-memory append-only log storing committed entries
-   - **BlockchainService**: Service implementation maintaining the append-only log
-   - **Phase 1 scope**: Consensus-only; client submits data, consensus handles ordering, service appends to log
-   - Ready for Phase 2: service layer enhancement, commitment confirmation, client-side logging
-
-### Test Results
-- **22 tests passing** across all components
-  - 7 APL network tests
-  - 5 basic HotStuff tests
-  - 10 Byzantine HotStuff tests
-
-### Running Tests
+### 1) Compile
 ```bash
-mvn clean compile  # Build the project
-mvn test          # Run all unit tests
+mvn clean compile
 ```
 
-### Architecture
-
-```
-src/main/java/depchain/
-├── consensus/          # HotStuff consensus protocols
-│   ├── Vote.java
-│   ├── SignedVote.java
-│   ├── QuorumCertificate.java
-│   ├── Block.java
-│   ├── HotStuffNode.java
-│   ├── ByzantineHotStuffNode.java
-│   ├── ConsensusListener.java
-│   └── TimeoutFailureDetector.java
-├── network/            # Authenticated Perfect Links (APL)
-│   ├── APLListener.java
-│   ├── APLMessage.java
-│   └── AuthenticatedPerfectLinksImpl.java
-├── service/            # Service layer (append-only log)
-│   ├── AppendOnlyLog.java
-│   └── BlockchainService.java
-└── client/             # Client library
-    └── ServiceClient.java
+### 2) Generate keys
+If the keys are yet to be created:
+```bash
+mvn exec:java -Dexec.mainClass="depchain.crypto.KeyVault"
 ```
 
-### Phase 2 Preview (Not Yet Implemented)
-The following will be added in Phase 2:
-- Service adapter layer for translating client requests into consensus blocks
-- Commitment confirmation protocol (clients wait for committed blocks)
-- Client-side append-only log with persistence
-- Transaction semantics (proper request/reply)
+### 3) Run all tests
+```bash
+mvn test
+```
+
+### 4) Run a single test class (example)
+```bash
+mvn test -Dtest=depchain.blockchain.BlockchainIntegrationTest 
+```
+
+## Demo: run local servers + CLI client
+
+### 0) Generate keys
+If the keys are yet to be created:
+```bash
+mvn exec:java -Dexec.mainClass="depchain.crypto.KeyVault"
+```
+
+### 1) Start the server process
+In terminal A:
+```bash
+mvn exec:java -Dexec.mainClass="depchain.consensus.ServerMain"
+```
+
+`ServerMain` boots the 4 local server nodes on ports `20003..20006`.
+
+### 2) Start one client CLI
+In terminal B (client 0 example):
+```bash
+mvn exec:java -Dexec.mainClass="depchain.client.ClientCLI" -Dexec.args="0 20000"
+```
+
+You can also start other clients by changing args:
+- client 1: `-Dexec.args="1 20001"`
+- client 2: `-Dexec.args="2 20002"`
+
+### 3) Example for CLI commands
+CLI prompt:
+```text
+help
+ist total-supply
+ist balance aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+depcoin balance aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+```
+
+To exit:
+```text
+exit
+```

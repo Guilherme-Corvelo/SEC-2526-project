@@ -1,4 +1,4 @@
-package depchain.integration;
+package depchain.aa_integration;
 
 import depchain.blockchain.Block;
 import depchain.blockchain.BlockStorage;

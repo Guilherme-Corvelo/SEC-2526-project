@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -15,15 +14,12 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import depchain.API.DepchainAPI;
 import depchain.blockchain.Transaction;
 import depchain.client.Client;
 import depchain.consensus.HotStuffNode;
 import depchain.consensus.Message;
-import depchain.network.APL;
 
 class ClientHotStuffExecutionResultIntegrationTest {
 
@@ -69,7 +65,7 @@ class ClientHotStuffExecutionResultIntegrationTest {
         node2 = new HotStuffNode(2, portNode2, allAddresses, node2Keys.getPrivate(), publicKeys, f, replicaIds);
         node3 = new HotStuffNode(3, portNode3, allAddresses, node3Keys.getPrivate(), publicKeys, f, replicaIds);
 
-        /*
+        
         Transaction tx = new Transaction(
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "1234567891234567891234567891234567891234",
@@ -80,17 +76,7 @@ class ClientHotStuffExecutionResultIntegrationTest {
             21_000,
             clientKeys.getPublic()
             );
-            */
-        Transaction tx = new Transaction(
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            null,
-            0,
-            1,
-            1,
-            21_000,
-            clientKeys.getPublic()
-        );
+            
         tx.sign(clientKeys.getPrivate());
 
         CompletableFuture<Message> responseFuture = CompletableFuture.supplyAsync(() -> client.send(tx));

@@ -11,9 +11,6 @@ import java.util.HashMap;
 
 /**
  * ServerMain — entry point for a DepChain server node.
- *
- * Run with:
- *   mvn exec:java -Dexec.mainClass="depchain.consensus.ServerMain" 
  */
 public class ServerMain {
 
